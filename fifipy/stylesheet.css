@@ -1,0 +1,76 @@
+/* Style sheet */
+QMainWindow {
+background-color: QLinearGradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 AliceBlue, stop: 1 PowderBlue);
+}
+/* Menu */
+QMenu {
+background-color: LightSkyBlue;
+background: AliceBlue;
+color: 'black';
+}
+QMenuBar {
+background-color: QLinearGradient(x1:0, y1:0, x2:0, y2:1, stop:0 PowderBlue, stop:1 LightSkyBlue);
+background: AliceBlue;
+color: 'black';
+}
+QMenuBar::item {
+background: transparent;
+spacing: 3px;
+padding: 1px 4px;
+border-radius: 4px;
+}
+QMenuBar::item::hover{
+background: red;
+}
+QMenuBar::item:selected { /* when selected using mouse or keyboard */
+background: LightSkyBlue;
+}
+QMenuBar::item:pressed {
+background: SkyBlue;
+}
+/* Tool tips */
+QToolTip {
+font-size: 10pt;
+border: 1px solid black;
+padding: 2px;
+border-radius: 3px;
+opacity: 200;
+background-color: AliceBlue;
+}
+/* Status Bar */
+QStatusBar {
+background-color: Azure;
+border: 1px solid black;
+border-radius: 3px;
+}
+/* Toolbar */
+QToolBar {
+background-color: transparent;
+border: 0px transparent;
+}
+QToolBar::separator{
+background-color: transparent;
+}
+QToolButton:pressed {
+background-color: Lavender;
+border-radius: 3px;
+}
+QToolButton {		
+height:	18px;
+width: 18px;
+}
+/* PushButton */
+QPushButton {
+    background-color: PowderBlue;
+    border-style: outset;
+    border-width: 2px;
+    border-radius: 10px;
+    border-color: SkyBlue;
+    font: bold 14px;
+    min-width: 10em;
+    padding: 6px;
+}
+QPushButton:pressed {
+    background-color: LightSkyBlue;
+    border-style: inset;
+}
