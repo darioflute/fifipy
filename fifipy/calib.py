@@ -23,7 +23,7 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
     odate = int(year[2:] + month)
 
     path0, file0 = os.path.split(__file__)
-    wvdf = pd.read_csv(path0 + '/CalibrationResults.csv', header=[0, 1])
+    wvdf = pd.read_csv(path0 + '/data/CalibrationResults.csv', header=[0, 1])
     ndates = (len(wvdf.columns) - 2) // 5
     dates = np.zeros(ndates)
     for i in range(ndates):
@@ -77,3 +77,16 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
         result_dwdp[module, :] = dwdp
 
     return result, result_dwdp
+
+
+def computeAllWaves(gpos, dichroic, obsdate, detchan, order):
+    from dask import delayed, compute
+    import numpy as np
+    wavegpos = [delayed(waveCal)(g, dichroic, obsdate, detchan, order) for g in gpos]        
+    waves = compute(* wavegpos, scheduler='processes')
+    wave = []
+    dwave = []
+    for w in waves:
+        wave.append(w[0])
+        dwave.append(w[1])
+    return np.array(wave), np.array(dwave)

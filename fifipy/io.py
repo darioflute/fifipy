@@ -70,3 +70,27 @@ def readData(fitsfile):
             hk  = (obsdate, (ra,dec), (dx,dy), angle, (za_sta,za_end), 
                    (alti_sta,alti_end), (wv_sta,wv_end))
             return aor, hk, gratpos, flux
+        
+def saveSlopeFits(gpos, dichroic, obsdate, detchan, order, specs, wave, dwave, outname):
+    """Save in a FITS file the results of slope fitting and wavelength calibration."""
+    hdu = fits.PrimaryHDU()
+    hdu.header['CHANNEL'] = detchan
+    hdu.header['ORDER'] = order
+    hdu.header['DICHROIC'] = dichroic
+    hdu.header['OBSDATE'] = obsdate
+    hdu1 = fits.ImageHDU()
+    hdu1.data = gpos
+    hdu1.header['EXTNAME'] = 'Grating Position'
+    hdu2 = fits.ImageHDU()
+    hdu2.data = specs
+    hdu2.header['EXTNAME'] = 'SPECS'
+    hdu3 = fits.ImageHDU()
+    hdu3.data = wave
+    hdu3.header['EXTNAME'] = 'WAVE'
+    hdu4 = fits.ImageHDU()
+    hdu4.data = dwave
+    hdu4.header['EXTNAME'] = 'DWAVE'
+    hdul = fits.HDUList([hdu, hdu1, hdu2, hdu3, hdu4])
+    hdul.writeto(outname, overwrite=True)
+    hdul.close()
+    
