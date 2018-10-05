@@ -94,3 +94,34 @@ def saveSlopeFits(gpos, dichroic, obsdate, detchan, order, specs, wave, dwave, o
     hdul.writeto(outname, overwrite=True)
     hdul.close()
     
+def readSlopeFits(path, filename):
+    hdl = fits.open(path+filename)
+    hdl.info()
+    g = hdl['Grating Position'].data
+    w = hdl['WAVE'].data
+    dw = hdl['DWAVE'].data
+    s = hdl['SPECS'].data
+    hdl.close()
+    return g, w, dw, s
+
+def saveMediumSpectrum(w, medspec, path, filename):
+    # Save the BB curve
+    hdu = fits.PrimaryHDU()
+    hdu1 = fits.ImageHDU()
+    hdu1.data = w
+    hdu1.header['EXTNAME'] = 'Wavelength'
+    hdu2 = fits.ImageHDU()
+    hdu2.data = medspec
+    hdu2.header['EXTNAME'] = 'Flux'
+    hdul = fits.HDUList([hdu, hdu1, hdu2])
+    hdul.writeto(path+filename, overwrite=True)
+    hdul.close()   
+
+def readMediumSpectrum(file, silent=False):
+    hdl = fits.open(file)
+    if silent == False:
+        hdl.info()
+    w = hdl['Wavelength'].data
+    f = hdl['Flux'].data
+    hdl.close()
+    return w, f
