@@ -43,7 +43,7 @@ def plotResponse(channel,dichroic,order,w,medspec,alpha,caldir,period):
             title = 'Blue [D'+str(dichroic)+' M1] '+period
             out = 'D'+str(dichroic)+'B1.pdf'
             w1=75; w2=95
-            xlim = [65,130]
+            xlim = [65,135]
         else:
             eff = 'GrtEffB2.txt'
             trans = 'BlueChannel2ndOrder'+str(dichroic)+'Dichroic_'+period+'.txt'
@@ -80,7 +80,6 @@ def plotResponse(channel,dichroic,order,w,medspec,alpha,caldir,period):
     temperature = 150 * u.K
     flux_nu = blackbody_nu(wavelengths, temperature)
     fnu = medspec/flux_nu
-
     fig,ax = plt.subplots(figsize=(16,8))
     ax.plot(wt,tt,label=label1,color='blue',alpha=0.75)
 
@@ -92,10 +91,13 @@ def plotResponse(channel,dichroic,order,w,medspec,alpha,caldir,period):
         yt = np.interp(w, wt, tt)
         alpha = np.sum(yt*fnu)/np.sum(fnu*fnu)
         f = fnu*alpha
+        print('alpha is ', alpha)
     else:
         mt = (wt > w1) & (wt < w2)
         mw = (w > w1 ) & (w < w2)
-        f = fnu*np.median(tt[mt])/np.median(fnu[mw])
+        alpha = np.nanmedian(tt[mt])/np.nanmedian(fnu[mw])
+        f = fnu*alpha
+        print('alpha ', alpha)
     ax.plot(w,f,label='Rescaled $F_{det}/F_{BB_{150K}}$',color='darkorange',linewidth=3)
 
 

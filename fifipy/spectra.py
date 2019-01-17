@@ -30,17 +30,34 @@ def computeSplineFits(w1, dw1, s1, mode):
     print("Resolution at ",l," is: ",R)
     print("Delta-lambda is: ", l/R)
     w = np.arange(wmin,wmax,l/R)
+    
 
     # Compute spline fits
+    c = 299792458.e-6 # um/s
     spectra = []
-
     for ispex in range(16):
         for ispax in range(25):
-            x1 = w1[:,ispax,ispex]
-            delta = np.nanmedian(x1[1:]-x1[:-1])
-            diff = np.nanmax(x1)-np.nanmin(x1)
-            t = np.arange(np.nanmin(x1)+delta,np.nanmax(x1)-delta,diff/30.)
-            x = w1[:,ispax,ispex]; y = -s1[:,ispex,ispax]/dw1[:,ispax,ispex]
+            x = w1[:,ispax,ispex]
+            #diff = np.nanmax(x1)-np.nanmin(x1)
+            #t = np.arange(np.nanmin(x1)+delta,np.nanmax(x1)-delta,diff/30.)
+            # In this way I compute F_lambda, I should compute F_nu
+            dnu = c/x * dw1[:,ispax,ispex]/x
+            y = -s1[:,ispex,ispax]/dnu
+            # F_nu
+            #c = 299.792458e12 # um/s
+            #dnu = c * dw1[:,ispax,ispex]/(x*x)
+            #y = -s1[:,ispex,ispax]/dnu
+            # Sort x
+            idx = np.argsort(x)
+            x = x[idx]
+            y = y[idx]
+            # Uniq
+            u, idx = np.unique(x, return_index=True)
+            x = x[idx]
+            y = y[idx]
+            delta = np.nanmedian(x[1:]-x[:-1])
+            diff = np.nanmax(x)-np.nanmin(x)-2*delta
+            t = np.arange(np.nanmin(x)+delta,np.nanmax(x)-delta,diff/30.)
             spectrum = LSQUnivariateSpline(x,y,t)
             spectra.append(spectrum(w))
         
