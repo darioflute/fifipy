@@ -33,7 +33,7 @@ def computeSplineFits(w1, dw1, s1, mode):
     
 
     # Compute spline fits
-    c = 299792458.e-6 # um/s
+    c = 299792458.e+6 # um/s
     spectra = []
     for ispex in range(16):
         for ispax in range(25):
@@ -57,7 +57,7 @@ def computeSplineFits(w1, dw1, s1, mode):
             y = y[idx]
             delta = np.nanmedian(x[1:]-x[:-1])
             diff = np.nanmax(x)-np.nanmin(x)-2*delta
-            t = np.arange(np.nanmin(x)+delta,np.nanmax(x)-delta,diff/30.)
+            t = np.arange(np.nanmin(x)+delta,np.nanmax(x)-delta,diff/50.)
             spectrum = LSQUnivariateSpline(x,y,t)
             spectra.append(spectrum(w))
         
