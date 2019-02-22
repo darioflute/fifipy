@@ -98,9 +98,9 @@ def readFlats(channel, silent=False):
     from astropy.io import fits
     path0, file0 = os.path.split(__file__)
     if channel == 'RED':
-        infile = path0 + '/data/RedFlats.fits'
+        infile = path0 + '/data/RedFlats.fits.gz'
     else:
-        infile = path0 + '/data/BlueFlats.fits'
+        infile = path0 + '/data/BlueFlats.fits.gz'
     hdl = fits.open(infile)
     if silent == False:
         hdl.info()
