@@ -6,7 +6,13 @@ from dask import delayed, compute
 # import dask.multiprocessing
 
 def fitSlope(data):
-    """Fit the slope of a series of ramps."""
+    """
+        Fit the slope of a series of ramps for lab data.
+        In this case, data are taken with the internal calibrator.
+        A wheel with two holes allows to see the calibrator twice during a cycle.
+        Only the 1st and 3rd ramps are retained, the other two being affected by the change in flux.
+        The off position corresponds to the wheel position when the calibrator is not visible.
+    """
 
     saturationLimit = 2.7
     dtime = 1/250.  # Hz
@@ -36,6 +42,42 @@ def fitSlope(data):
         slopes.append(rslopes[0]-rslopes[1])  # On - Off
         
     return np.array(slopes)
+
+def fitSlopeSky(data):
+    """
+        Fit the slope of a series of ramps for atmospheric data.
+        In this case, data are taken on the sky and there is no off position for chopping.
+        So, all the ramps are treated in the same way.
+        The first ramp for each grating position is discarded.
+    """
+
+    saturationLimit = 2.7
+    dtime = 1/250.  # Hz
+    x = dtime * np.arange(32)
+    rshape = np.shape(data)
+    ngratings = rshape[0]
+    nramps = rshape[1] // 32  # There are 32 readouts per ramp
+    slopes = []
+    
+    for ig in range(ngratings):
+        ramps = data[ig,:].reshape(nramps, 32)
+        ramp = ramps[1:,:]  # Discard first ramp
+        ramp = np.nanmean(ramp, axis = 0)
+        # Mask saturated values
+        mask = ramp > saturationLimit
+        # Mask first readouts and last one
+        mask[0:3] = 1
+        mask[-1] = 1
+        if np.sum(~mask) > 5:  # Compute only if there are at least 5 pts
+            slope, intercept, r_value, \
+                p_value, std_err = stats.linregress(x[~mask],ramp[~mask])
+        else:
+            slope = np.nan
+        slopes.append(slope)  # Mean ramp slope
+        
+    return np.array(slopes)
+
+
 
 def fitSlopeSpax(data):
     """Fit the slope of the 16 spectral pixels."""
@@ -93,7 +135,6 @@ def computeSpectra(files):
 
 
 def computeSlopes(i,data):
-    
     slopes = []
     for j in range(25):
         slope = fitSlope(data[:,:,j])
@@ -101,7 +142,17 @@ def computeSlopes(i,data):
         
     return i, np.array(slopes)
 
-def multiSlopes(data):
+def computeSlopesSky(i,data):
+    slopes = []
+    for j in range(25):
+        slope = fitSlopeSky(data[:,:,j])
+        slopes.append(slope)
+        
+    return i, np.array(slopes)
+
+
+
+def multiSlopes(data, sky=False):
     ''' Compute slopes for each pixel and grating position using multiprocessing '''    
     import multiprocessing as mp
 
@@ -112,7 +163,10 @@ def multiSlopes(data):
         pass
 
     with mp.Pool(processes=mp.cpu_count()) as pool:
-        res = [pool.apply_async(computeSlopes, args=(i,data[:,:,i,:])) for i in range(16)]
+        if sky:
+            res = [pool.apply_async(computeSlopesSky, args=(i,data[:,:,i,:])) for i in range(16)]
+        else:
+            res = [pool.apply_async(computeSlopes, args=(i,data[:,:,i,:])) for i in range(16)]
         # print('res length is ',len(res))
         results = [p.get() for p in res]
     #pool.terminate() # Kill the pool once terminated (otherwise stays in memory)
@@ -131,3 +185,42 @@ def multiSlopes(data):
             spectra[ig,i,:] = slopes[:,ig]
 
     return spectra
+
+
+def multiSlopesSky(data, sky=True):
+    ''' Compute slopes for each pixel and grating position using multiprocessing '''  
+    ''' Just to order spectra in the same way as wavelength (ng, 25, 16)'''
+    import multiprocessing as mp
+
+    # To avoid forking error in MAC OS-X
+    try:
+        mp.set_start_method('spawn')
+    except RuntimeError:
+        pass
+
+    with mp.Pool(processes=mp.cpu_count()) as pool:
+        if sky:
+            res = [pool.apply_async(computeSlopesSky, args=(i,data[:,:,i,:])) for i in range(16)]
+        else:
+            res = [pool.apply_async(computeSlopes, args=(i,data[:,:,i,:])) for i in range(16)]
+        # print('res length is ',len(res))
+        results = [p.get() for p in res]
+    #pool.terminate() # Kill the pool once terminated (otherwise stays in memory)
+    #results.sort()   not needed ...
+    
+    ds = np.shape(data)
+    ng = ds[0]
+    #print('number of gratings ',ng)
+
+    spectra = np.zeros((ng,25,16))
+    for r in results:
+        i = r[0]
+        slopes = r[1]
+        for ig in range(ng):
+            #print(i,np.shape(slopes))
+            spectra[ig,:,i] = slopes[:,ig]
+
+    return spectra
+
+
+    

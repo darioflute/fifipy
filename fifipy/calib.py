@@ -90,3 +90,52 @@ def computeAllWaves(gpos, dichroic, obsdate, detchan, order):
         wave.append(w[0])
         dwave.append(w[1])
     return np.array(wave), np.array(dwave)
+
+
+def readFlats(channel, silent=False):
+    ''' Read flats '''
+    import os
+    from astropy.io import fits
+    path0, file0 = os.path.split(__file__)
+    if channel == 'RED':
+        infile = path0 + '/data/RedFlats.fits'
+    else:
+        infile = path0 + '/data/BlueFlats.fits'
+    hdl = fits.open(infile)
+    if silent == False:
+        hdl.info()
+    wflat = hdl['WAVE'].data
+    specflat = hdl['SPECFLAT'].data
+    especflat = hdl['ESPECFLAT'].data
+    spatflat = hdl['SPATFLAT'].data
+    hdl.close()
+    return wflat, specflat, especflat, spatflat
+
+
+def applyFlats(waves, fluxes, channel):
+    ''' Apply flats to fluxes '''
+    import numpy as np
+    wflat, specflat, especflat, spatflat = readFlats(channel, silent=True)
+    for i in range(16):
+        for j in range(25):
+            sf = np.interp(waves[:,j,i], wflat[:,j,i], specflat[:,j,i])
+            fluxes[:,j,i] /= sf
+    for j in range(25):
+        fluxes[:,j,:] /= spatflat[j]
+        
+    return fluxes
+
+def readAtran(detchan, order):
+    import os
+    from astropy.io import fits
+    path0, file0 = os.path.split(__file__)
+    if detchan == 'BLUE':
+        file = 'AtranBlue'+str(order)+'.fits.gz'
+    else:
+        file = 'AtranRed.fits.gz'
+    path = path0+'/data/'
+    hdl = fits.open(path+file)
+    wt = hdl['WAVELENGTH'].data
+    atran = hdl['ATRAN'].data
+    hdl.close()
+    return wt, atran

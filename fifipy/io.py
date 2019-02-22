@@ -61,6 +61,8 @@ def readData(fitsfile):
         if nramps < (ncycles*4*ngrat*32):
             print ("WARNING: Number of ramps does not agree with header for ",
                    fitsfile)
+            print('n ramps ', nramps)
+            print('ncycles, ngrat ', ncycles, ngrat)
         else:
             data = data[:ncycles*4*ngrat*32,1:17,:25]
             flux = data.reshape(ngrat,ncycles*4*32,16,25)
@@ -96,7 +98,7 @@ def saveSlopeFits(gpos, dichroic, obsdate, detchan, order, specs, wave, dwave, o
     
 def readSlopeFits(path, filename):
     hdl = fits.open(path+filename)
-    hdl.info()
+    #hdl.info()
     g = hdl['Grating Position'].data
     w = hdl['WAVE'].data
     dw = hdl['DWAVE'].data
@@ -125,3 +127,24 @@ def readMediumSpectrum(file, silent=False):
     f = hdl['Flux'].data
     hdl.close()
     return w, f
+
+def saveFlats(w, specflat, especflat, spatflat, channel, outfile):
+    hdu = fits.PrimaryHDU()
+    hdu.header['CHANNEL'] = channel
+    hdu1 = fits.ImageHDU()
+    hdu1.data = specflat
+    hdu1.header['EXTNAME'] = 'WAVE'
+    hdu2 = fits.ImageHDU()
+    hdu2.data = specflat
+    hdu2.header['EXTNAME'] = 'SPECFLAT'
+    hdu3 = fits.ImageHDU()
+    hdu3.data = especflat
+    hdu3.header['EXTNAME'] = 'ESPECFLAT'
+    hdu4 = fits.ImageHDU()
+    hdu4.data = spatflat
+    hdu4.header['EXTNAME'] = 'SPATFLAT'
+    hdul = fits.HDUList([hdu, hdu1, hdu2, hdu3, hdu4])
+    hdul.writeto(outfile, overwrite=True)
+    hdul.close()   
+    
+   

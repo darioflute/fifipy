@@ -13,40 +13,36 @@ def getResolution(mode, l):
         print('Invalid mode entered. Valid modes are R, B1, and B2')
         return l*0
     
-def computeSplineFits(w1, dw1, s1, mode):
-    wmin=0
-    wmax=250
-    for ispex in range(16):
-        for ispax in range(25):
-            x1 = w1[:,ispax,ispex]
-            xmin = np.nanmin(x1)
-            xmax = np.nanmax(x1)
-            if xmin > wmin: wmin = xmin
-            if xmax < wmax: wmax = xmax
+def computeSplineFits(w1, dw1, s1, mode, wmin=None, wmax=None, delta=0.5):
+    
+    if wmin is None or wmax is None:
+        wmin=0
+        wmax=250
+        for ispex in range(16):
+            for ispax in range(25):
+                x1 = w1[:,ispax,ispex]
+                f1 = s1[:,ispex, ispax]
+                idx = np.isfinite(f1)
+                if np.sum(idx) > 2:
+                    xmin = np.nanmin(x1[idx])
+                    xmax = np.nanmax(x1[idx])
+                    if xmin > wmin: wmin = xmin
+                    if xmax < wmax: wmax = xmax
 
     # Resolution
     l = (wmin+wmax)*0.5
     R = getResolution(mode, l)
     print("Resolution at ",l," is: ",R)
-    print("Delta-lambda is: ", l/R)
     w = np.arange(wmin,wmax,l/R)
     
-
     # Compute spline fits
     c = 299792458.e+6 # um/s
     spectra = []
-    for ispex in range(16):
-        for ispax in range(25):
+    for ispax in range(25):
+        for ispex in range(16):
             x = w1[:,ispax,ispex]
-            #diff = np.nanmax(x1)-np.nanmin(x1)
-            #t = np.arange(np.nanmin(x1)+delta,np.nanmax(x1)-delta,diff/30.)
-            # In this way I compute F_lambda, I should compute F_nu
             dnu = c/x * dw1[:,ispax,ispex]/x
-            y = -s1[:,ispex,ispax]/dnu
-            # F_nu
-            #c = 299.792458e12 # um/s
-            #dnu = c * dw1[:,ispax,ispex]/(x*x)
-            #y = -s1[:,ispex,ispax]/dnu
+            y = s1[:,ispex,ispax]/dnu
             # Sort x
             idx = np.argsort(x)
             x = x[idx]
@@ -55,11 +51,19 @@ def computeSplineFits(w1, dw1, s1, mode):
             u, idx = np.unique(x, return_index=True)
             x = x[idx]
             y = y[idx]
-            delta = np.nanmedian(x[1:]-x[:-1])
-            diff = np.nanmax(x)-np.nanmin(x)-2*delta
-            t = np.arange(np.nanmin(x)+delta,np.nanmax(x)-delta,diff/50.)
-            spectrum = LSQUnivariateSpline(x,y,t)
-            spectra.append(spectrum(w))
+
+            nknots = int((np.nanmax(x)-np.nanmin(x))//delta)
+            if nknots > 10:
+                ntot = len(x)-8
+                idxk= 4+ntot//(nknots-1)*np.arange(nknots)
+                t = x[idxk]
+                spectrum = LSQUnivariateSpline(x,y,t)
+                s = spectrum(w)
+                idx = (w < x[1]) | (w > x[-1])
+                s[idx] = np.nan
+            else:
+                s = np.ones(len(w)) * np.nan
+            spectra.append(s)
         
     return w, np.array(spectra)
 
@@ -67,6 +71,7 @@ def computeMedianSpatialSpectra(spectra):
     """Compute spatial median spectra: a spectrum for each spaxel."""
     spatspectra = []
     for ispax in range(25):
+        # Discard deviant spectra
         d = []
         for ispex in range(16):
             r = []
@@ -74,13 +79,175 @@ def computeMedianSpatialSpectra(spectra):
                 r.append(np.nanmedian(spectra[ispax*16+jspex]/spectra[ispax*16+ispex]))
             d.append(np.nanmean(np.array(r)))
         d = np.array(d)
-        md = np.nanmedian(d)
-        sd = np.nanstd(d)
-        m = np.abs(d-md) < sd
+        med = np.nanmedian(d)
+        mad = np.nanmedian(np.abs(d-med))
+        m = np.abs(d-med) < 3*mad
+        # Obtain mean spectrum from non-deviant spectra
         spec = spectra[ispax*16+np.arange(16,dtype='int')]
-        mspec = np.nanmedian(spec[m],axis=0)
+        mspec = np.nanmean(spec[m],axis=0)
         spatspectra.append(mspec)
     return spatspectra
+
+def computeFlatRed(wwaves,sspectra,sspatspectra,ispax,ispex,minflat=0.5,maxflat=2.3,delta=0.4):
+    from scipy.signal import medfilt
+    from scipy.ndimage.filters import generic_filter
+    # Flats
+    w=[];f=[]
+    nfiles = np.shape(wwaves)[0]
+    for i in range(nfiles):
+        wi = wwaves[i]
+        fi = sspectra[i][ispax*16+ispex]/sspatspectra[i][ispax]
+        m = (fi < minflat) | (fi > maxflat)
+        fi[m] = np.nan
+        # Mask variable values
+        med = medfilt(fi,21)
+        mad = medfilt(np.abs(fi-med))
+        m = np.abs(fi-med) > 3*mad
+        fi[m] = np.nan
+        # append
+        w.append(wi)
+        f.append(fi)
+
+    # Discard highly deviant flats
+    f = np.array(f)
+    w = np.array(w)
+    mf = np.nanmedian(f, axis = 1)
+    med = np.nanmedian(mf)
+    mad = np.nanmedian(np.abs(med-mf))
+    mask = np.abs(med - mf) < 10*mad
+    w = w[mask]
+    f = f[mask]
+        
+    # concatenate
+    try:
+        w=np.concatenate(w); f=np.concatenate(f)
+        m = np.isfinite(f)
+        w=w[m]
+        f=f[m]
+    except:
+        print("There are no arrays to concatenate")
+        return None
+    
+    idx = np.argsort(w); w=w[idx]; f=f[idx]
+    # making wavelengths unique
+    while(True):
+        dd = w[1:]-w[:-1]
+        idx = np.array(np.where(dd == 0.))  
+        if np.sum(idx) == 0:
+            break
+        else:
+            w[idx+1] = w[idx]+0.0001
+    
+    try:
+        ntot = len(w)-8
+        nknots = 10
+        idxk= 4+ntot//(nknots-1)*np.arange(nknots)
+        t = w[idxk]
+
+        flat = LSQUnivariateSpline(w,f,t,k=3,ext=3)
+        # Residuals
+        for k in range(4):
+            res = f - flat(w)
+            med = medfilt(res,15)
+            mad = medfilt(np.abs(res-med))
+            m = (np.abs(res) < 3*mad) 
+            x = w[m]
+            nknots = int((np.nanmax(x)-np.nanmin(x))//delta)
+            #nknots = 100
+            ntot = len(x)-8
+            idxk= 4+ntot//(nknots-1)*np.arange(nknots)
+            t = x[idxk]
+            flat = LSQUnivariateSpline(w[m],f[m],t,k=3,ext=3)
+        # Compute dispersion of residuals        
+        residuals = f[m] - flat(w[m])
+        dev  = generic_filter(residuals, np.std, size=30)
+        eflat = LSQUnivariateSpline(w[m],dev,t)
+        return (flat, eflat)
+    except:
+        return None
+    
+def computeFlatBlue(wwaves,sspectra,sspatspectra,ispax,ispex,minflat=0.6,maxflat=1.8,delta=2.0):
+    from scipy.signal import medfilt
+    from scipy.ndimage.filters import generic_filter
+    # Flats
+    w=[];f=[]
+    nfiles = np.shape(wwaves)[0]
+    for i in range(nfiles):
+        wi = wwaves[i]
+        fi = sspectra[i][ispax*16+ispex]/sspatspectra[i][ispax]
+        m = (fi < minflat) | (fi > maxflat)
+        fi[m] = np.nan
+        # Mask variable values
+        med = medfilt(fi,21)
+        mad = medfilt(np.abs(fi-med))
+        m = np.abs(fi-med) > 3*mad
+        fi[m] = np.nan
+        # append
+        w.append(wi)
+        f.append(fi)
+
+    # Discard highly deviant flats
+    f = np.array(f)
+    w = np.array(w)
+    mf = np.nanmedian(f, axis = 1)
+    med = np.nanmedian(mf)
+    mad = np.nanmedian(np.abs(med-mf))
+    mask = np.abs(med - mf) < 10*mad
+    w = w[mask]
+    f = f[mask]
+        
+    # concatenate
+    try:
+        w=np.concatenate(w); f=np.concatenate(f)
+        m = np.isfinite(f)
+        w=w[m]
+        f=f[m]
+    except:
+        print("There are no arrays to concatenate")
+        return None
+    
+    idx = np.argsort(w); w=w[idx]; f=f[idx]
+    # making wavelengths unique
+    while(True):
+        dd = w[1:]-w[:-1]
+        idx = np.array(np.where(dd == 0.))  
+        if np.sum(idx) == 0:
+            break
+        else:
+            w[idx+1] = w[idx]+0.0001
+    
+    try:
+        # knots based on wavelength resolution
+        # Let's difference between orders (limit at 70um)
+        nknots1 = (70-np.nanmin(w)-0.2)/(delta/2.) 
+        nknots2 = (np.nanmax(w)-70-0.2)/delta
+        t = [np.nanmin(w)+0.2+delta/2.*np.arange(nknots1), 70+delta*np.arange(nknots2)]
+        t = np.concatenate(t)
+        #nknots = (np.nanmax(w)-np.nanmin(w)-0.4)/delta
+        #t = np.nanmin(w)+0.2+delta*np.arange(nknots)
+
+        flat = LSQUnivariateSpline(w,f,t,k=3,ext=3)
+        # Residuals
+        for k in range(4):
+            res = f - flat(w)
+            med = medfilt(res,15)
+            mad = medfilt(np.abs(res-med))
+            m = (np.abs(res) < 5*mad) 
+            x = w[m]
+            #nknots = (np.nanmax(x)-np.nanmin(x)-0.4)/delta
+            #t = np.nanmin(x)+0.2+delta*np.arange(nknots)           
+            nknots1 = (70-np.nanmin(x)-0.2)/(delta/2.) 
+            nknots2 = (np.nanmax(x)-70-0.2)/delta
+            t = [np.nanmin(x)+0.2+delta/2.*np.arange(nknots1), 70+delta*np.arange(nknots2)]
+            t = np.concatenate(t)
+            flat = LSQUnivariateSpline(w[m],f[m],t,k=3,ext=3)
+        # Compute dispersion of residuals        
+        residuals = f[m] - flat(w[m])
+        dev  = generic_filter(residuals, np.std, size=30)
+        eflat = LSQUnivariateSpline(w[m],dev,t)
+        return (flat, eflat)
+    except:
+        return None
 
 
 def computeMedianSpectrum(w, spatspectra):
@@ -102,9 +269,11 @@ def computeMedianSpectrum(w, spatspectra):
         d.append(np.nanmean(np.array(r)))
     d = np.array(d)
     md = np.nanmedian(d)
-    sd = np.nanstd(d)
-    m = np.abs(d-md) < sd
-    medspec = np.nanmedian(spatspectra[m],axis=0)
+    mad = np.nanmedian(np.abs(d-md))
+    #sd = np.nanstd(d)
+    m = np.abs(d-md) < 3*mad
+    #medspec = np.nanmedian(spatspectra[m],axis=0)
+    medspec = np.nanmean(spatspectra[m],axis=0)
 
     # Compute flats
     flat = np.ones(25)
