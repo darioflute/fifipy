@@ -137,5 +137,7 @@ def readAtran(detchan, order):
     hdl = fits.open(path+file)
     wt = hdl['WAVELENGTH'].data
     atran = hdl['ATRAN'].data
+    altitudes = hdl['ALTITUDE'].data
+    wvzs = hdl['WVZ'].data
     hdl.close()
-    return wt, atran
+    return wt, atran, altitudes, wvzs
