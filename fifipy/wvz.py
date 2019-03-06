@@ -41,14 +41,15 @@ def computeFluxes(group):
         for w,f in zip(wave,flux):
             waves.append(transpose(w))
             fluxes.append(transpose(f))
+    
     # Apply flats
     waves = np.array(waves)
     fluxes = np.array(fluxes)
-    fluxes = applyFlats(waves, fluxes, detchan)
-    
+    # one obsdate is OK, since data are taken during the same day
+    fluxes = applyFlats(waves, fluxes, detchan, obsdate)  
     return waves, fluxes, detchan, order, za[0], altitude[0]
 
-def computeAtran(waves, fluxes, detchan, order, za, altitude):
+def computeAtran(waves, fluxes, detchan, order, za, altitude, computeAlpha=True):
     import matplotlib.pyplot as plt
     from fifipy.calib import readAtran
     import statsmodels.api as sm
@@ -63,6 +64,28 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude):
     lspec = sm.nonparametric.lowess(ftot,wtot, frac=0.03)
     wlow = lspec[:,0]
     flow = lspec[:,1]
+    
+    # compute better spatial flats
+    alpha = np.ones(25)    
+    if computeAlpha:
+        for i in range(25):
+            wi = np.ravel(waves[:,i,:])
+            f_ = np.interp(wi, wlow, flow)
+            fi = np.ravel(fluxes[:,i,:])
+            alpha[i] = np.nansum(fi*f_)/np.nansum(fi*fi)
+        
+        # Recompute
+        for i in range(25):
+            fluxes[:,i,:] *= alpha[i]
+        wtot = np.ravel(waves[:,good,:])
+        ftot = np.ravel(fluxes[:,good,:])
+        idx = (ftot > 0.1e-8)
+        wtot = wtot[idx]
+        ftot = ftot[idx]
+        lspec = sm.nonparametric.lowess(ftot,wtot, frac=0.03)
+        wlow = lspec[:,0]
+        flow = lspec[:,1]
+    
     
     wt, atran, altitudes, wvs = readAtran(detchan, order)
     #altitudes = 38000+np.arange(13)*500.
@@ -180,7 +203,7 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude):
         ax.grid()
         plt.show()
 
-    return wvmin
+    return wvmin, alpha
 
 def getGroups(wvzdir, flight):
     from glob import glob as gb

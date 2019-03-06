@@ -111,11 +111,63 @@ def readFlats(channel, silent=False):
     hdl.close()
     return wflat, specflat, especflat, spatflat
 
+def readSpecFlats(channel, silent=False):
+    ''' Read flats '''
+    import os
+    from astropy.io import fits
+    path0, file0 = os.path.split(__file__)
+    if channel == 'RED':
+        infile = path0 + '/data/RedSpecFlats.fits.gz'
+    else:
+        infile = path0 + '/data/BlueSpecFlats.fits.gz'
+    hdl = fits.open(infile)
+    if silent == False:
+        hdl.info()
+    wflat = hdl['WAVE'].data
+    specflat = hdl['SPECFLAT'].data
+    especflat = hdl['ESPECFLAT'].data
+    hdl.close()
+    return wflat, specflat, especflat
 
-def applyFlats(waves, fluxes, channel):
+def readSpatFlats(channel, silent=False):
+    ''' Read flats '''
+    import os
+    from astropy.io import fits
+    path0, file0 = os.path.split(__file__)
+    if channel == 'RED':
+        infile = path0 + '/data/RedSpatFlats.fits.gz'
+    else:
+        infile = path0 + '/data/BlueSpatFlats.fits.gz'
+    hdl = fits.open(infile)
+    if silent == False:
+        hdl.info()
+    dates = hdl['DATES'].data
+    spatflat = hdl['SPATFLAT'].data
+    hdl.close()
+    return spatflat, dates
+
+
+def applyFlats(waves, fluxes, channel, obsdate):
     ''' Apply flats to fluxes '''
     import numpy as np
-    wflat, specflat, especflat, spatflat = readFlats(channel, silent=True)
+    wflat, specflat, especflat = readSpecFlats(channel, silent=True)
+    spatflat, dates = readSpatFlats(channel, silent=True)
+    
+    # Extract month and year from date
+    year = obsdate.split('-')[0]
+    month = obsdate.split('-')[1]
+    odate = int(year[2:] + month)
+    # Select correct date
+    i = 0
+    for date in dates:
+        if date < odate:
+            i += 1
+        else:
+            pass
+    if i > 0:
+        i -= 1
+    spatflat = spatflat[i]
+    
     for i in range(16):
         for j in range(25):
             sf = np.interp(waves[:,j,i], wflat[:,j,i], specflat[:,j,i])

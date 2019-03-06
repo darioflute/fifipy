@@ -147,4 +147,32 @@ def saveFlats(w, specflat, especflat, spatflat, channel, outfile):
     hdul.writeto(outfile, overwrite=True)
     hdul.close()   
     
+def saveSpatFlats(spatflat, dates, channel, outfile):
+    hdu = fits.PrimaryHDU()
+    hdu.header['CHANNEL'] = channel
+    hdu1 = fits.ImageHDU()
+    hdu1.data = dates
+    hdu1.header['EXTNAME'] = 'DATES'
+    hdu2 = fits.ImageHDU()
+    hdu2.data = spatflat
+    hdu2.header['EXTNAME'] = 'SPATFLAT'
+    hdul = fits.HDUList([hdu, hdu1, hdu2])
+    hdul.writeto(outfile, overwrite=True)
+    hdul.close()   
+    
+def saveSpecFlats(w, specflat, especflat, channel, outfile):
+    hdu = fits.PrimaryHDU()
+    hdu.header['CHANNEL'] = channel
+    hdu1 = fits.ImageHDU()
+    hdu1.data = specflat
+    hdu1.header['EXTNAME'] = 'WAVE'
+    hdu2 = fits.ImageHDU()
+    hdu2.data = specflat
+    hdu2.header['EXTNAME'] = 'SPECFLAT'
+    hdu3 = fits.ImageHDU()
+    hdu3.data = especflat
+    hdu3.header['EXTNAME'] = 'ESPECFLAT'
+    hdul = fits.HDUList([hdu, hdu1, hdu2, hdu3])
+    hdul.writeto(outfile, overwrite=True)
+    hdul.close()   
    
