@@ -177,11 +177,16 @@ def computeFlatBlue(wwaves,sspectra,sspatspectra,ispax,ispex,minflat=0.6,maxflat
         fi = sspectra[i][ispax*16+ispex]/sspatspectra[i][ispax]
         m = (fi < minflat) | (fi > maxflat)
         fi[m] = np.nan
-        # Mask variable values
-        med = medfilt(fi,21)
-        mad = medfilt(np.abs(fi-med))
-        m = np.abs(fi-med) > 3*mad
-        fi[m] = np.nan
+        # If there is some values
+        if np.sum(~np.isnan(fi)) > 0:
+            idxm = np.concatenate(np.argwhere(~np.isnan(fi)))
+            # Mask variable values
+            med = medfilt(fi[idxm],21)
+            mad = medfilt(np.abs(fi[idxm]-med))
+            m2 = np.abs(fi[idxm]-med) > 3*mad
+            if np.sum(m2) > 0:
+                idx = np.concatenate(np.argwhere(m2))
+                fi[idxm[idx]] = np.nan
         # append
         w.append(wi)
         f.append(fi)

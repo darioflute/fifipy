@@ -150,31 +150,44 @@ def readSpatFlats(channel, silent=False):
 def applyFlats(waves, fluxes, channel, obsdate):
     ''' Apply flats to fluxes '''
     import numpy as np
-    wflat, specflat, especflat = readSpecFlats(channel, silent=True)
-    spatflat, dates = readSpatFlats(channel, silent=True)
+    
+    #wflat, specflat, especflat = readSpecFlats(channel, silent=True)
+    #spatflat, dates = readSpatFlats(channel, silent=True)
+    
+    wflat, specflat, especflat, spatflat= readFlats(channel, silent=True)
     
     # Extract month and year from date
-    year = obsdate.split('-')[0]
-    month = obsdate.split('-')[1]
-    odate = int(year[2:] + month)
-    # Select correct date
-    i = 0
-    for date in dates:
-        if date < odate:
-            i += 1
-        else:
-            pass
-    if i > 0:
-        i -= 1
-    spatflat = spatflat[i]
+    #year = obsdate.split('-')[0]
+    #month = obsdate.split('-')[1]
+    #odate = int(year[2:] + month)
+    ## Select correct date
+    #i = 0
+    #for date in dates:
+    #    if date < odate:
+    #        i += 1
+    #    else:
+    #        pass
+    #if i > 0:
+    #    i -= 1
+    #spatflat = spatflat[i]
     
     for i in range(16):
         for j in range(25):
-            sf = np.interp(waves[:,j,i], wflat[:,j,i], specflat[:,j,i])
+            sf = np.interp(waves[:,j,i], wflat, specflat[:,j,i])
             fluxes[:,j,i] /= sf
     for j in range(25):
         fluxes[:,j,:] /= spatflat[j]
         
+    # Apply bad pixel mask
+    import os
+    path0, file0 = os.path.split(__file__)
+    if channel == 'RED':
+        bads = np.loadtxt(path0 + '/data/badpixels_2019_r.txt')
+    else:
+        bads = np.loadtxt(path0 + '/data/badpixels_2019_b.txt')
+    for bad in bads:
+        j,i = bad
+        fluxes[:,np.int(j)-1,np.int(i)-1] = np.nan
     return fluxes
 
 def readAtran(detchan, order):

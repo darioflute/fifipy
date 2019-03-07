@@ -132,7 +132,7 @@ def saveFlats(w, specflat, especflat, spatflat, channel, outfile):
     hdu = fits.PrimaryHDU()
     hdu.header['CHANNEL'] = channel
     hdu1 = fits.ImageHDU()
-    hdu1.data = specflat
+    hdu1.data = w
     hdu1.header['EXTNAME'] = 'WAVE'
     hdu2 = fits.ImageHDU()
     hdu2.data = specflat
@@ -164,7 +164,7 @@ def saveSpecFlats(w, specflat, especflat, channel, outfile):
     hdu = fits.PrimaryHDU()
     hdu.header['CHANNEL'] = channel
     hdu1 = fits.ImageHDU()
-    hdu1.data = specflat
+    hdu1.data = w
     hdu1.header['EXTNAME'] = 'WAVE'
     hdu2 = fits.ImageHDU()
     hdu2.data = specflat
