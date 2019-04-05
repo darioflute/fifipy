@@ -176,3 +176,35 @@ def saveSpecFlats(w, specflat, especflat, channel, outfile):
     hdul.writeto(outfile, overwrite=True)
     hdul.close()   
    
+def saveResponse(wtot, response, eresponse, output, channel, order, dichroic):
+    import numpy as np
+    from astropy.io import fits
+    wr = np.arange(np.nanmin(wtot),np.nanmax(wtot),0.2)
+    fr = response(wr)
+    er = eresponse(wr)
+    data = []
+    data.append(wr)
+    data.append(fr)
+    data.append(er)
+    data = np.array(data)
+    hdr = fits.Header()
+    hdr['DETCHAN'] = channel
+    hdr['ORDER'] = order
+    hdr['DICHOIC'] = dichroic
+    hdr['XUNIT'] = 'microns'
+    hdr['YUNIT'] = 'ADU/Hz/Jy'
+    hdu = fits.PrimaryHDU(data, header=hdr)
+    hdul = fits.HDUList([hdu])
+    hdul.writeto(output,overwrite=True)
+    
+def readResponse(file):
+    from astropy.io import fits
+    
+    hdr = fits.open(file)
+    data = hdr['PRIMARY'].data
+    hdr.close()
+    w = data[0,:]
+    f = data[1,:]
+    e = data[2,:]
+    
+    return w, f, e

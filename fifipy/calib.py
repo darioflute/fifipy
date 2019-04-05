@@ -206,3 +206,42 @@ def readAtran(detchan, order):
     wvzs = hdl['WVZ'].data
     hdl.close()
     return wt, atran, altitudes, wvzs
+
+
+# Routines to compute (with spline fitting) and save the response in a file
+def computeResponse(wtot, rtot, nknots = 50, t = None):
+    from scipy.interpolate import LSQUnivariateSpline
+    from scipy.ndimage.filters import generic_filter
+    import numpy as np
+    # Order wtot
+    idx = np.argsort(wtot)
+    wtot = wtot[idx]
+    rtot = rtot[idx]
+    if t is None:
+        nknots1=50
+        ntot = len(wtot)-8
+        idxk = 4+ntot//(nknots1-1)*np.arange(nknots1)
+        t = wtot[idxk]
+        tset = False
+    else:
+        tset = True
+    x = wtot; y = rtot
+    response = LSQUnivariateSpline(x,y,t)
+    # Rejecting outliers
+    residual = rtot - response(wtot)
+    med = np.nanmedian(residual)
+    mad = np.nanmedian(np.abs(residual - med))
+    idx = np.abs(residual-med) <  5*mad
+    if tset == False:
+        xx = x[idx]
+        ntot = len(xx)-8
+        idxk= 4+ntot//(nknots-1)*np.arange(nknots)
+        t = xx[idxk]
+    response = LSQUnivariateSpline(x[idx],y[idx],t)
+    
+    residuals = y[idx] - response(x[idx])
+    dev  = generic_filter(residuals, np.std, size=30)
+    eresponse = LSQUnivariateSpline(x[idx],dev,t)
+    
+    return t, response, eresponse
+

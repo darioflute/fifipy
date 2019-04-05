@@ -309,4 +309,4 @@ def flightPlots(lwgroups, alt, wblue, wred, title):
     ax.set_ylabel('WVZ fit/monitor')
     plt.show()
     
-    return time, temp, wmon, fig1
+    return date, time, temp, wmon, fig1
