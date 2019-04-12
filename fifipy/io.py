@@ -160,9 +160,11 @@ def saveSpatFlats(spatflat, dates, channel, outfile):
     hdul.writeto(outfile, overwrite=True)
     hdul.close()   
     
-def saveSpecFlats(w, specflat, especflat, channel, outfile):
+def saveSpecFlats(w, specflat, especflat, channel, order, dichroic, outfile):
     hdu = fits.PrimaryHDU()
     hdu.header['CHANNEL'] = channel
+    hdu.header['ORDER'] = order
+    hdu.header['DICHROIC'] = dichroic
     hdu1 = fits.ImageHDU()
     hdu1.data = w
     hdu1.header['EXTNAME'] = 'WAVE'

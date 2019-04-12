@@ -32,7 +32,7 @@ def computeSplineFits(w1, dw1, s1, mode, wmin=None, wmax=None, delta=0.5):
     # Resolution
     l = (wmin+wmax)*0.5
     R = getResolution(mode, l)
-    print("Resolution at ",l," is: ",R)
+    # print("Resolution at ",l," is: ",R)
     w = np.arange(wmin,wmax,l/R)
     
     # Compute spline fits
