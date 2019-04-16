@@ -4,10 +4,12 @@ def biweightLocation(data,axis=None):
     """ Biweight estimator (location) """
     from astropy.stats.funcs import median_absolute_deviation
     import numpy as np
+    np.seterr(divide='ignore', invalid='ignore')
     c = 6.0
     data = np.asanyarray(data)
-    M = np.nanmedian(data, axis=axis)
+    M = np.nanmedian(data, axis=axis, keepdims=True)
     # set up the differences
+    #d = data - M
     d = data - M
     # set up the weighting
     mad = median_absolute_deviation(data, axis=axis,ignore_nan=True)

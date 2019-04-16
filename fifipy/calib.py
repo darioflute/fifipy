@@ -79,6 +79,89 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
     return result, result_dwdp
 
 
+def mwaveCal(gratpos, dichroic, obsdate, array, order):
+    import numpy as np
+    import pandas as pd
+    import os
+
+    '''
+    Usage:
+    l,lw = waveCal( gratpos=1496600, order=1, array='RED',dichroic=105,
+                   obsdate='2015-03-12T04:41:33')
+    '''
+
+    if array == 'RED':
+        channel = 'R'
+    else:
+        if order == '1':
+            channel = 'B1'
+        else:
+            channel = 'B2'
+
+    # Extract month and year from date
+    year = obsdate.split('-')[0]
+    month = obsdate.split('-')[1]
+    odate = int(year[2:] + month)
+
+    #path0, file0 = os.path.split(__file__)
+    wvdf = pd.read_csv('/Users/dfadda/Python/fifipy/fifipy/data/CalibrationResults.csv', header=[0, 1])
+    ndates = (len(wvdf.columns) - 2) // 5
+    dates = np.zeros(ndates)
+    for i in range(ndates):
+        dates[i] = wvdf.columns[2 + i * 5][0]
+
+    # Select correct date
+    i = 0
+    for date in dates:
+        if date < odate:
+            i += 1
+        else:
+            pass
+    cols = range(2 + 5 * (i - 1), 2 + 5 * (i - 1) + 5)
+    w1 = wvdf[wvdf.columns[cols]].copy()
+    if channel == 'R':
+        if dichroic == 105:
+            co = w1.columns[0]
+        else:
+            co = w1.columns[1]
+    elif channel == 'B1':
+        co = w1.columns[2]
+    else:
+        if dichroic == 105:
+            co = w1.columns[3]
+        else:
+            co = w1.columns[4]
+    g0 = w1.loc[0][co]
+    NP = w1.loc[1][co]
+    a = w1.loc[2][co]
+    ISF = w1.loc[3][co]
+    gamma = w1.loc[4][co]
+    PS = w1.loc[5][co]
+    QOFF = w1.loc[6][co]
+    QS = w1.loc[7][co]
+    ISOFF = w1.loc[8:][co].values
+
+    ng = len(gratpos)
+    pix = np.arange(16) + 1.
+    result = np.zeros((ng, 16, 25))
+    result_dwdp = np.zeros((ng, 16, 25))
+    for ig, gp in enumerate(gratpos):
+        for module in range(25):
+            phi = 2. * np.pi * ISF * (gp + ISOFF[module]) / 2.0 ** 24
+            sign = np.sign(pix - QOFF)
+            delta = (pix - 8.5) * PS + sign * (pix - QOFF) ** 2 * QS
+            slitPos = 25 - 6 * (module // 5) + module % 5
+            g = g0 * np.cos(np.arctan2(slitPos - NP, a))  # Careful with arctan
+            lambd = 1000. * (g / order) * (np.sin(phi + gamma + delta) +
+                                           np.sin(phi - gamma))
+            dwdp = 1000. * (g / order) * (PS + 2. * sign * QS *
+                                          (pix - QOFF)) * np.cos(phi + gamma + delta)
+            result[ig, :, module] = lambd
+            result_dwdp[ig, :, module] = dwdp
+
+    return result, result_dwdp
+
+
 def computeAllWaves(gpos, dichroic, obsdate, detchan, order):
     from dask import delayed, compute
     import numpy as np
@@ -92,34 +175,21 @@ def computeAllWaves(gpos, dichroic, obsdate, detchan, order):
     return np.array(wave), np.array(dwave)
 
 
-def readFlats(channel, silent=False):
+def readFlats(channel, order, dichroic, obsdate, silent=False):
     ''' Read flats '''
-    import os
-    from astropy.io import fits
-    path0, file0 = os.path.split(__file__)
-    if channel == 'RED':
-        infile = path0 + '/data/RedFlats.fits.gz'
-    else:
-        infile = path0 + '/data/BlueFlats.fits.gz'
-    hdl = fits.open(infile)
-    if silent == False:
-        hdl.info()
-    wflat = hdl['WAVE'].data
-    specflat = hdl['SPECFLAT'].data
-    especflat = hdl['ESPECFLAT'].data
-    spatflat = hdl['SPATFLAT'].data
-    hdl.close()
+    wflat, specflat, especflat = readSpecFlats(channel, order, dichroic, silent=silent)
+    spatflat = readSpatFlats(channel, obsdate, silent=silent)
     return wflat, specflat, especflat, spatflat
 
-def readSpecFlats(channel, silent=False):
+def readSpecFlats(channel, order, dichroic, silent=False):
     ''' Read flats '''
     import os
     from astropy.io import fits
     path0, file0 = os.path.split(__file__)
     if channel == 'RED':
-        infile = path0 + '/data/RedSpecFlats.fits.gz'
+        infile = path0 + '/data/spectralFlatsR1D'+str(dichroic)+'.fits.gz'
     else:
-        infile = path0 + '/data/BlueSpecFlats.fits.gz'
+        infile = path0 + '/data/spectralFlatsB'+str(order)+'D'+str(dichroic)+'.fits.gz'
     hdl = fits.open(infile)
     if silent == False:
         hdl.info()
@@ -129,48 +199,38 @@ def readSpecFlats(channel, silent=False):
     hdl.close()
     return wflat, specflat, especflat
 
-def readSpatFlats(channel, silent=False):
+def readSpatFlats(channel, obsdate, silent=False):
     ''' Read flats '''
-    import os
+    import os, re
     from astropy.io import fits
     path0, file0 = os.path.split(__file__)
     if channel == 'RED':
-        infile = path0 + '/data/RedSpatFlats.fits.gz'
+        infile = path0 + '/data/spatialFlatR.fits'
     else:
-        infile = path0 + '/data/BlueSpatFlats.fits.gz'
+        infile = path0 + '/data/spatialFlatB.fits'
     hdl = fits.open(infile)
     if silent == False:
         hdl.info()
     dates = hdl['DATES'].data
-    spatflat = hdl['SPATFLAT'].data
+    spatflats = hdl['SPATFLAT'].data
     hdl.close()
-    return spatflat, dates
+       
+    # Extract month, year, and day from date
+    parts = re.split('-|T|:', obsdate)
+    odate = int(parts[0]+parts[1]+parts[2])
+    # Select correct date
+    for date, spatflat in zip(dates, spatflats):
+        if date < odate:
+            pass
+        else:
+            return spatflat
 
 
-def applyFlats(waves, fluxes, channel, obsdate):
+def applyFlats(waves, fluxes, channel, order, dichroic, obsdate):
     ''' Apply flats to fluxes '''
     import numpy as np
     
-    #wflat, specflat, especflat = readSpecFlats(channel, silent=True)
-    #spatflat, dates = readSpatFlats(channel, silent=True)
-    
-    wflat, specflat, especflat, spatflat= readFlats(channel, silent=True)
-    
-    # Extract month and year from date
-    #year = obsdate.split('-')[0]
-    #month = obsdate.split('-')[1]
-    #odate = int(year[2:] + month)
-    ## Select correct date
-    #i = 0
-    #for date in dates:
-    #    if date < odate:
-    #        i += 1
-    #    else:
-    #        pass
-    #if i > 0:
-    #    i -= 1
-    #spatflat = spatflat[i]
-    
+    wflat, specflat, especflat, spatflat= readFlats(channel, order, dichroic, obsdate, silent=True)
     for i in range(16):
         for j in range(25):
             sf = np.interp(waves[:,j,i], wflat, specflat[:,j,i])
@@ -189,6 +249,7 @@ def applyFlats(waves, fluxes, channel, obsdate):
         j,i = bad
         fluxes[:,np.int(j)-1,np.int(i)-1] = np.nan
     return fluxes
+
 
 def readAtran(detchan, order):
     import os

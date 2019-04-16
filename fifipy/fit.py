@@ -77,7 +77,42 @@ def fitSlopeSky(data):
         
     return np.array(slopes)
 
+def meanSlopeSky(data):
+    """
+    This routine computes the biweight mean of all the slopes between consecutive readings.
+    """
+    from fifipy.stats import biweightLocation as biwloc
 
+    saturationLimit = 2.7
+    dtime = 1/250.  # Hz
+    #x = dtime * np.arange(32)
+    rshape = np.shape(data)
+    ngratings = rshape[0]
+    nramps = rshape[1] // 32  # There are 32 readouts per ramp
+    slopes = []
+    
+    for ig in range(ngratings):
+        ramps = data[ig,:].reshape(nramps, 32)
+        dr = []
+        for ramp in ramps:
+            mask = ramp > saturationLimit
+            mask[0] = 1 # Discard first and last difference
+            mask[-1] = 1
+            if np.sum(~mask) > 2:
+                ramp = ramp[~mask]
+                dramp = ramp[1:]-ramp[:-1]
+                ok = np.isfinite(dramp)
+                dr.append(dramp[ok])
+        if len(dr) > 0:
+            dr = np.concatenate(dr)
+            if len(dr) > 10:
+                slope = biwloc(dr) / dtime
+            else:
+                slope = np.nan
+        else:
+            slope = np.nan
+        slopes.append(slope)
+    return np.array(slopes)
 
 def fitSlopeSpax(data):
     """Fit the slope of the 16 spectral pixels."""
@@ -146,6 +181,7 @@ def computeSlopesSky(i,data):
     slopes = []
     for j in range(25):
         slope = fitSlopeSky(data[:,:,j])
+        #slope = meanSlopeSky(data[:,:,j])  # Instead of fitting, compute the biweight mean of slope
         slopes.append(slope)
         
     return i, np.array(slopes)

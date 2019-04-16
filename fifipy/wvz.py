@@ -46,8 +46,56 @@ def computeFluxes(group):
     waves = np.array(waves)
     fluxes = np.array(fluxes)
     # one obsdate is OK, since data are taken during the same day
-    fluxes = applyFlats(waves, fluxes, detchan, obsdate)  
+    fluxes = applyFlats(waves, fluxes, detchan, order, dichroic, obsdate)  
     return waves, fluxes, detchan, order, za[0], altitude[0]
+
+def computeMeanFlux(group):
+    from fifipy.io import readData
+    from fifipy.stats import biweightLocation
+    from fifipy.calib import mwaveCal, applyFlats
+    import numpy as np
+    #from numpy import transpose
+    c = 299792458.e+6 # um/s
+    saturationLimit = 2.7
+    dtime = 1/250.  # Hz
+
+    spectra = []
+    gpos = []
+    
+    for file in group:
+        # Read data
+        aor, hk, gratpos, voltage = readData(file)
+        # Append grating positions
+        gpos.append(gratpos)
+        # Compute biweight means of slopes
+        for v0 in voltage:
+            nz,ny,nx = np.shape(v0)
+            v0 = v0.reshape(nz, nx*ny)
+            m = v0 > saturationLimit
+            v0[m] = np.nan
+            dv0 = v0[1:,:] - v0[:-1,:]
+            dv0[range(31,nz-1,32),:]=np.nan  # in-between 2 ramps bad
+            dv0[range( 0,nz-1,32),:]=np.nan  # First bad
+            dvm = biweightLocation(dv0, axis=0) / dtime
+            spectra.append(dvm)
+            
+    gpos = np.concatenate(gpos)
+    spectra = np.array(spectra)
+
+    detchan, order, dichroic, ncycles, nodbeam, filegpid, filenum = aor
+    obsdate, coords, offset, angle, za, altitude, wv = hk
+    wave,dw = mwaveCal(gratpos=gpos, order=order, array=detchan,dichroic=dichroic,obsdate=obsdate)
+
+    ng = len(gpos)
+    spectra = spectra.reshape(ng, 16, 25)
+
+    # Compute flux
+    dnu = c/wave * dw/wave
+    flux = spectra / dnu
+    wave = np.transpose(wave, (0, 2, 1))  # Transpose the 2 last axes
+    flux = np.transpose(flux, (0, 2, 1))
+    flux = applyFlats(wave, flux, detchan, order, dichroic, obsdate) 
+    return wave, flux, detchan, order, za[0], altitude[0]
 
 def computeAtran(waves, fluxes, detchan, order, za, altitude, computeAlpha=True):
     import matplotlib.pyplot as plt
@@ -55,7 +103,12 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, computeAlpha=True)
     import statsmodels.api as sm
     import numpy as np
     
-    good = [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+    # good = [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+    
+    if detchan == 'RED':  
+        good = [1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+    else:
+        good = [1,2,6,7,8,11,12,13,16,17,20,21,22]
     wtot = np.ravel(waves[:,good,:])
     ftot = np.ravel(fluxes[:,good,:])
     idx = (ftot > 0.1e-8)
