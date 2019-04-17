@@ -30,13 +30,13 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
         dates[i] = wvdf.columns[2 + i * 5][0]
 
     # Select correct date
-    i = 0
-    for date in dates:
+    # Select correct date
+    for i, date in enumerate(dates):
         if date < odate:
-            i += 1
-        else:
             pass
-    cols = range(2 + 5 * (i - 1), 2 + 5 * (i - 1) + 5)
+        else:
+            break
+    cols = range(2 + 5 * i , 2 + 5 * i + 5)
     w1 = wvdf[wvdf.columns[cols]].copy()
     if channel == 'R':
         if dichroic == 105:
@@ -103,21 +103,20 @@ def mwaveCal(gratpos, dichroic, obsdate, array, order):
     month = obsdate.split('-')[1]
     odate = int(year[2:] + month)
 
-    #path0, file0 = os.path.split(__file__)
-    wvdf = pd.read_csv('/Users/dfadda/Python/fifipy/fifipy/data/CalibrationResults.csv', header=[0, 1])
+    path0, file0 = os.path.split(__file__)
+    wvdf = pd.read_csv( path0 + '/data/CalibrationResults.csv', header=[0, 1])
     ndates = (len(wvdf.columns) - 2) // 5
     dates = np.zeros(ndates)
     for i in range(ndates):
         dates[i] = wvdf.columns[2 + i * 5][0]
 
     # Select correct date
-    i = 0
-    for date in dates:
+    for i, date in enumerate(dates):
         if date < odate:
-            i += 1
-        else:
             pass
-    cols = range(2 + 5 * (i - 1), 2 + 5 * (i - 1) + 5)
+        else:
+            break
+    cols = range(2 + 5 * i, 2 + 5 * i  + 5)
     w1 = wvdf[wvdf.columns[cols]].copy()
     if channel == 'R':
         if dichroic == 105:
@@ -266,7 +265,7 @@ def readAtran(detchan, order):
     altitudes = hdl['ALTITUDE'].data
     wvzs = hdl['WVZ'].data
     hdl.close()
-    return wt, atran, altitudes, wvzs
+    return (wt, atran, altitudes, wvzs)
 
 
 # Routines to compute (with spline fitting) and save the response in a file
