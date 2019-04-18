@@ -58,15 +58,27 @@ def fitSlopesFile(file):
     dtime = 1/250.  # Hz
     aor, hk, gratpos, voltage = readData(file)
     spectra = []
+    # Readouts not considered: first two and the last one
+    last = -1
+    first = 2
     for v0 in voltage:
+        # Reshape in ramps
         nz,ny,nx = np.shape(v0)
-        v0 = v0.reshape(nz, nx*ny)
+        nr = nz // 32
+        v0 = v0.reshape(nr,32, nx*ny)
+        v0 = np.transpose(v0, (1, 0, 2))
         m = v0 > saturationLimit
         v0[m] = np.nan
-        dv0 = v0[1:,:] - v0[:-1,:]
-        dv0[range(31,nz-1,32),:]=np.nan  # in-between 2 ramps bad
-        dv0[range( 0,nz-1,32),:]=np.nan  # First bad
-        dv0[:31] = np.nan # First ramp is not considered
+        # Compute intermediate slopes up to a difference of 16 readouts (halp ramp)
+        # The first ramp is not considered
+        dv0=[]
+        for i in range(3,16):
+            vv = (v0[first+i:last,1:,:]-v0[first:last-i,1:,:])/i
+            dv0.append(vv)
+        dv0 = np.concatenate(dv0)
+        n1,n2,n3 = np.shape(dv0)
+        dv0 = dv0.reshape(n1*n2, n3)
+        # Compute the mean slope
         dvm = biweightLocation(dv0, axis=0) / dtime
         spectra.append(dvm)
     return spectra, gratpos
@@ -74,7 +86,7 @@ def fitSlopesFile(file):
 
 def computeMeanFlux(group, multi=True):
     from fifipy.io import readData
-    from fifipy.stats import biweightLocation
+    #from fifipy.stats import biweightLocation
     from fifipy.calib import mwaveCal, applyFlats
     import numpy as np
     from dask import delayed, compute
@@ -91,27 +103,12 @@ def computeMeanFlux(group, multi=True):
             spectra.append(ss)
             gpos.append(gg)
     else:
-        saturationLimit = 2.7
-        dtime = 1/250.  # Hz
         spectra = []
         gpos = []
         for file in group:
-            # Read data
-            aor, hk, gratpos, voltage = readData(file)
-            # Append grating positions
-            gpos.append(gratpos)
-            # Compute biweight means of slopes
-            for v0 in voltage:
-                nz,ny,nx = np.shape(v0)
-                v0 = v0.reshape(nz, nx*ny)
-                m = v0 > saturationLimit
-                v0[m] = np.nan
-                dv0 = v0[1:,:] - v0[:-1,:]
-                dv0[range(31,nz-1,32),:]=np.nan  # in-between 2 ramps bad
-                dv0[range( 0,nz-1,32),:]=np.nan  # First bad
-                dvm = biweightLocation(dv0, axis=0) / dtime
-                spectra.append(dvm)
-     
+            ss, gg = fitSlopesFile(file)
+            spectra.append(ss)
+            gpos.append(gg)     
            
     gpos = np.concatenate(gpos)
     spectra = np.array(spectra)
