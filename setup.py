@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Setup script fo installing the fifipy library."""
 
-from setuptools import setup
+from distutils.core import setup
 
 config = {
     'name': 'fifipy',

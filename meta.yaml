@@ -1,0 +1,34 @@
+{% set name = "sospex" %}
+{% set version = "0.1" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: "{{ version }}"
+
+source:
+  git_tag: master
+  git_url: https://github.com/darioflute/fifipy.git
+
+build:
+  
+requirements:
+  build:
+    - setuptools
+    - python
+
+  run:
+    - python
+    - matplotlib >=3.0.2
+    - numpy >=1.11
+    - scipy
+    - astropy >=3.0
+        
+test:
+  imports:
+    - fifipy
+
+about:
+  home: https://github.com/darioflute/fifipy
+  license: GPL3
+  license_file: LICENSE
+  description: 'Library for reduction of non-standard FIFI-LS data.'
