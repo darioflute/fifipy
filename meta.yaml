@@ -1,4 +1,4 @@
-{% set name = "sospex" %}
+{% set name = "fifipy" %}
 {% set version = "0.1" %}
 
 package:
