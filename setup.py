@@ -17,7 +17,7 @@ config = {
     'scripts': [],
     'include_package_data': True,
     'package_data': {'fifipy': ['icons/*.png', 'icons/*.gif', 'stylesheet.css',
-                                'data/CalibrationResults.csv','data/*.fits.gz']},
+                                'data/CalibrationResults.csv','data/*.gz','data/*txt','data/*.fits']},
     'install_requires': ['numpy', 'matplotlib', 'astropy']
 }
 
