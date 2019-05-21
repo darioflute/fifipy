@@ -33,6 +33,17 @@ class MyHTMLParser(HTMLParser):
     def handle_data(self, data):
         if self.recording:
             self.data.append(data)
+            
+            
+def addExtension(data, extname, unit, hdr):
+    from astropy.io import fits
+    hdu = fits.ImageHDU()
+    hdu.data = data
+    hdu.header['EXTNAME']=(extname)
+    if unit !=None: hdu.header['BUNIT']=(unit)
+    if hdr != None: hdu.header.extend(hdr)
+    return hdu
+
 
 def callAtran(i,altitude,za,wv,w1,w2,res):
     url = 'https://atran.arc.nasa.gov/cgi-bin/atran/atran.cgi'
