@@ -86,7 +86,7 @@ def getATransBlue2(altitude,za,wv,interp=False):
     #w1 =  [ 50,  55,  60,  65,  70]
     #w2 =  [ 55,  60,  65,  70,  75]
     #res = [940,1060,1270,1590,1980]
-    w1 = np.arange(50,75,2.5)
+    w1 = np.arange(50,75,1.0)
     w2 = list(w1.copy())
     w2.append(75)
     w2 = w2[1:]
@@ -148,7 +148,7 @@ def getATransBlue1(altitude,za,wv,interp=False):
     from fifipy.spectra import getResolution
     from scipy.interpolate import interp1d
 
-    w1 =  np.arange(67,125,2.5)
+    w1 =  np.arange(67,125,1.)
     w2 = list(w1.copy())
     w2.append(125)
     w2 = w2[1:]
@@ -253,7 +253,7 @@ def getATransRed(altitude, za, wv,interp=False):
     #w1 =  [105,120, 140, 160, 180]
     #w2 =  [120,140, 160, 180, 206]
     #res = [670,840,1050,1320,1635]
-    w1 = np.arange(105,205,5)
+    w1 = np.arange(105,205,2.0)
     w2 = list(w1.copy())
     w2 = list(w2)
     w2.append(206)

@@ -243,8 +243,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
         plt.subplots_adjust(wspace=0)
         #ax.plot( wlow,fabs)
         ax.plot( wt,t,color='orange',linewidth=2)
-        fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+str(za)+
-                     ', WVZ: ' + str(wvmin), size=20)
+        fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+
+                     ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
         fig.subplots_adjust(top=0.9) 
         plt.show()
     else:
@@ -289,8 +289,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
         ax.set_xlim(np.nanmin(wtot),np.nanmax(wtot))
         ax.plot( wt,t,color='orange',linewidth=2)
         ax.grid()
-        fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+str(za)+ 
-                     ', WVZ: ' + str(wvmin), size=20)
+        fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+ 
+                     ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
         plt.subplots_adjust(wspace=0)
         fig.subplots_adjust(top=0.9) 
         plt.show()
