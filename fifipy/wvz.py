@@ -215,6 +215,20 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
         diff = np.array(diff)
         imin = np.argmin(diff)
         wvmin = wvs[imin]
+        # Recompute minimum using a parabola through the lowest three points
+        try:
+            x1=wvs[imin-1]
+            x2=wvs[imin]
+            x3=wvs[imin+1]
+            y1=diff[imin-1]
+            y2=diff[imin]   
+            y3=diff[imin+1]
+            b = np.array([[x1*x1,y1,1],[x2*x2,y2,1],[x3*x3,y3,1]])
+            a = np.array([[y1,x1,1],[y2,x2,1],[y3,x3,1]])
+            wvmin = -0.5 * np.linalg.det(b)/np.linalg.det(a)
+        except:
+            pass
+
         t = at[imin]**depth
         tmax = np.nanmean(t[idmin])
         tmin = np.nanmean(t[idmax])
@@ -272,6 +286,19 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
         diff = np.array(diff)
         imin = np.argmin(diff)
         wvmin = wvs[imin]
+        try:
+            x1=wvs[imin-1]
+            x2=wvs[imin]
+            x3=wvs[imin+1]
+            y1=diff[imin-1]
+            y2=diff[imin]   
+            y3=diff[imin+1]
+            b = np.array([[x1*x1,y1,1],[x2*x2,y2,1],[x3*x3,y3,1]])
+            a = np.array([[y1,x1,1],[y2,x2,1],[y3,x3,1]])
+            wvmin = -0.5 * np.linalg.det(b)/np.linalg.det(a)
+        except:
+            pass
+
         t = at[imin]**depth
         tmax = np.nanmean(t[idmin])
         tmin = np.nanmean(t[idmax])
@@ -294,12 +321,13 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
         plt.subplots_adjust(wspace=0)
         fig.subplots_adjust(top=0.9) 
         plt.show()
+        
+
 
     return wvmin, alpha
 
 def getGroups(wvzdir, flight):
     from glob import glob as gb
-    #wvzdir = '/Users/dfadda/sofia/FIFI-LS/WaterVapor/'
     path = wvzdir + '/' + flight
     
     groups = []

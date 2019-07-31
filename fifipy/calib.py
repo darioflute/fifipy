@@ -50,15 +50,15 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
             co = w1.columns[3]
         else:
             co = w1.columns[4]
-    g0 = w1.ix[0][co]
-    NP = w1.ix[1][co]
-    a = w1.ix[2][co]
-    ISF = w1.ix[3][co]
-    gamma = w1.ix[4][co]
-    PS = w1.ix[5][co]
-    QOFF = w1.ix[6][co]
-    QS = w1.ix[7][co]
-    ISOFF = w1.ix[8:][co].values
+    g0 = w1.iloc[0][co]
+    NP = w1.iloc[1][co]
+    a = w1.iloc[2][co]
+    ISF = w1.iloc[3][co]
+    gamma = w1.iloc[4][co]
+    PS = w1.iloc[5][co]
+    QOFF = w1.iloc[6][co]
+    QS = w1.iloc[7][co]
+    ISOFF = w1.iloc[8:][co].values
 
     pix = np.arange(16) + 1.
     result = np.zeros((25, 16))
@@ -199,6 +199,30 @@ def readSpecFlats(channel, order, dichroic, silent=False):
     return wflat, specflat, especflat
 
 def readSpatFlats(channel, obsdate, silent=False):
+    ''' Read spatial flats.'''
+    import os, re
+    import numpy as np
+    path0, file0 = os.path.split(__file__)
+    if channel == 'RED':
+        infile = path0 + '/data/spatialFlatR.txt'
+    else:
+        infile = path0 + '/data/spatialFlatB.txt'
+    data = np.genfromtxt(infile,dtype='str',skip_header=1)
+    dates = data[:,0].astype(int)
+    spatflats = data[:, 1:].astype(float)
+    # Extract month, year, and day from date
+    parts = re.split('-|T|:', obsdate)
+    odate = int(parts[0]+parts[1]+parts[2])
+    # Select correct date
+    for date, spatflat in zip(dates, spatflats):
+        if date < odate:
+            pass
+        else:
+            return spatflat
+        
+
+
+def readSpatFlatsOld(channel, obsdate, silent=False):
     ''' Read flats '''
     import os, re
     from astropy.io import fits
