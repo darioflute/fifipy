@@ -14,7 +14,7 @@ config = {
     'download_url': 'https://github.com/darioflute/fifipy',
     'license': 'GPLv3+',
     'packages': ['fifipy'],
-    'scripts': [],
+    'scripts': ['bin/cubik'],
     'include_package_data': True,
     'package_data': {'fifipy': ['icons/*.png', 'icons/*.gif', 'stylesheet.css',
                                 'data/CalibrationResults.csv','data/*.gz','data/*txt','data/*.fits']},
