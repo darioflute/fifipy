@@ -6,7 +6,7 @@ def getResolution(mode, l):
     if mode == 'R':
         return 0.062423 * l*l - 6.6595 * l + 647.65
     elif mode == 'B1':
-        return 0.16864 * l*l - 22.831 * l + 1316.6 
+        return 0.16864 * l*l - 22.831 * l + 1316.6
     elif mode == 'B2':
         return 1.9163 * l*l - 187.35 * l + 5496.9
     else:
