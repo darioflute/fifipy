@@ -124,7 +124,8 @@ class GUI (QMainWindow):
     
     def initializeAperture(self):
         # Initialize aperture
-        radius = 10. / self.ic.pixscale
+        #radius = 10. / self.ic.pixscale
+        radius = self.specCube.radius / self.ic.pixscale
         sc = self.specCloud
         r0 = np.nanmedian(sc.x)
         d0 = np.nanmedian(sc.y)
@@ -162,11 +163,11 @@ class GUI (QMainWindow):
         pdistance = np.hypot(s.points[:,0] - xc, s.points[:,1] - yc)
         imin = np.argmin(pdistance)
         flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
-        self.sc.spectrum = Spectrum(s.wave, flux, w, f, dists)
+        self.sc.spectrum = Spectrum(s.wave, flux, w, f, dists, s.wt, s.at)
         self.sc.spectrum.set_colors()
-        print('delta, radius ', self.delta, radius)
+        #print('delta, radius ', self.delta, radius)
         self.sc.spectrum.set_filter(self.delta, radius)
-        print('updating spectrum ... ')
+        #print('updating spectrum ... ')
         self.sc.drawSpectrum()
 
         

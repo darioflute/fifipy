@@ -18,6 +18,14 @@ class spectralCube(object):
         self.X = hdl['X'].data
         self.Y = hdl['Y'].data
         self.R = self.header['RESOLUN']  # spectral resolution
+        utrans = hdl['UNSMOOTHED_TRANSMISSION'].data
+        self.wt = utrans[0,:]
+        self.at = utrans[1,:]
+        D = 2.5 #m
+        lam = np.nanmean(self.wave)*1.e-6
+        fwhm = 1.01 * lam / D * 180 / np.pi * 3600  
+        sigma = fwhm / 2.355
+        self.radius =  sigma * 1.9
         self.channel = self.header['DETCHAN']        
         if self.channel == 'BLUE':
             self.order = self.header["G_ORD_B"]
@@ -77,12 +85,14 @@ class spectralCloud(object):
         
 class Spectrum(object):
     """Spectrum at coordinate."""
-    def __init__(self, wave, flux, w, f, distance):
+    def __init__(self, wave, flux, w, f, distance, wt, at):
         self.wave = wave
         self.flux = flux
         self.w = w
         self.f = f
         self.d = distance
+        self.wt = wt
+        self.at = at
 
     def set_colors(self):
         colors = []
@@ -105,6 +115,7 @@ class Spectrum(object):
         self.colors = np.array(colors)
         
     def set_filter(self, delta, radius):
+        self.delta = delta #* 1.5
         flux = []
         n = []
         for wm in self.wave:
