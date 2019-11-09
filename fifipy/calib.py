@@ -24,10 +24,10 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
 
     path0, file0 = os.path.split(__file__)
     wvdf = pd.read_csv(path0 + '/data/CalibrationResults.csv', header=[0, 1])
-    ndates = (len(wvdf.columns) - 2) // 5
+    ndates = (len(wvdf.columns) - 2) // 4
     dates = np.zeros(ndates)
     for i in range(ndates):
-        dates[i] = wvdf.columns[2 + i * 5][0]
+        dates[i] = wvdf.columns[2 + i * 4][0]
 
     # Select correct date
     # Select correct date
@@ -36,7 +36,7 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
             pass
         else:
             break
-    cols = range(2 + 5 * i , 2 + 5 * i + 5)
+    cols = range(2 + 4 * i , 2 + 4 * i + 4)
     w1 = wvdf[wvdf.columns[cols]].copy()
     if channel == 'R':
         if dichroic == 105:
@@ -46,10 +46,7 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
     elif channel == 'B1':
         co = w1.columns[2]
     else:
-        if dichroic == 105:
-            co = w1.columns[3]
-        else:
-            co = w1.columns[4]
+        co = w1.columns[3]
     g0 = w1.iloc[0][co]
     NP = w1.iloc[1][co]
     a = w1.iloc[2][co]
@@ -105,10 +102,10 @@ def mwaveCal(gratpos, dichroic, obsdate, array, order):
 
     path0, file0 = os.path.split(__file__)
     wvdf = pd.read_csv( path0 + '/data/CalibrationResults.csv', header=[0, 1])
-    ndates = (len(wvdf.columns) - 2) // 5
+    ndates = (len(wvdf.columns) - 2) // 4
     dates = np.zeros(ndates)
     for i in range(ndates):
-        dates[i] = wvdf.columns[2 + i * 5][0]
+        dates[i] = wvdf.columns[2 + i * 4][0]
 
     # Select correct date
     for i, date in enumerate(dates):
@@ -116,7 +113,7 @@ def mwaveCal(gratpos, dichroic, obsdate, array, order):
             pass
         else:
             break
-    cols = range(2 + 5 * i, 2 + 5 * i  + 5)
+    cols = range(2 + 4 * i, 2 + 4 * i  + 4)
     w1 = wvdf[wvdf.columns[cols]].copy()
     if channel == 'R':
         if dichroic == 105:
@@ -126,10 +123,7 @@ def mwaveCal(gratpos, dichroic, obsdate, array, order):
     elif channel == 'B1':
         co = w1.columns[2]
     else:
-        if dichroic == 105:
-            co = w1.columns[3]
-        else:
-            co = w1.columns[4]
+        co = w1.columns[3]
     g0 = w1.loc[0][co]
     NP = w1.loc[1][co]
     a = w1.loc[2][co]
