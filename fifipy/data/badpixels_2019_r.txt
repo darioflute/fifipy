@@ -1,16 +1,26 @@
 #   For RED array
-#   Based on Lab measurements in 2018
+#   Based on Lab measurements in 2019/10
 #
 # column 1: spaxel number (1-25, numbered left to right in array)
 # column 2: spexel number (1-16, numbered bottom to top in array)
- 2  1 
+ 2  1
  2 16
  3  3
  3  7
- 3 16
+ 5  1
+ 5  2
+ 5  3
+ 5  4
+ 5  5
+ 5  7
  5 11
+ 7 14
  7 15
- 9 16
+10  3
+10 14
+13  3
+13  4
+13 16
 16  2
 16  3
 16  7
@@ -21,10 +31,20 @@
 18 10
 18 11
 18 13
+19  4
+19  5
+19 15
+20  4
 20 10
-20 13
+21  1
 21  3
 23  9
 24 15
 24 16
+25  1
 25  2
+25  3
+25  4
+25  5
+25 15
+25 16

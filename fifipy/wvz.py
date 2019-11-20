@@ -59,7 +59,7 @@ def fitSlopesFile(file):
     aor, hk, gratpos, voltage = readData(file)
     spectra = []
     # Readouts not considered: first two and the last one
-    last = -1
+    last = -2
     first = 2
     for v0 in voltage:
         # Reshape in ramps
@@ -140,7 +140,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
     # good = [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
     
     if detchan == 'RED':  
-        good = [1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+        #good = [1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+        good = [0,1,6,7,8,10,11,13,14,15,16,19,23]
     else:
         good = [1,2,6,7,8,11,12,13,16,17,20,21,22]
     wtot = np.ravel(waves[:,good,:])
@@ -311,7 +312,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
         ax.grid()
         ax=axes[1]
         for j in good:
-            ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.')
+            ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.',label=str(j))
+        ax.legend()
         ax.set_ylim(-0.2,1.2)
         ax.set_xlim(np.nanmin(wtot),np.nanmax(wtot))
         ax.plot( wt,t,color='orange',linewidth=2)
@@ -363,7 +365,8 @@ def flightPlots(lwgroups, alt, wblue, wred, title):
     for group in lwgroups:
         file = group[0]
         header = getheader(file)
-        temp.append(header['TEMPPRI1'])
+        #temp.append(header['TEMPPRI1'])
+        temp.append(header['TEMP_OUT'])
         date.append(header['DATE-OBS'])
         wmon.append(header['WVZ_STA'])
         t = re.findall(r'\_(\d{6})\_',file)
@@ -392,7 +395,7 @@ def flightPlots(lwgroups, alt, wblue, wred, title):
         formatter = ScalarFormatter()
         formatter.set_scientific(False)
         axis.set_major_formatter(formatter)
-    ax.set_ylabel('Mirror Temp ($^o$C)')
+    ax.set_ylabel('External Temp ($^o$C)')
     ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
     ax.grid(which='both')
     ax = axes[2]
