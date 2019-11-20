@@ -79,6 +79,133 @@ def callAtran(i,altitude,za,wv,w1,w2,res):
     return i,df.loc[:,1].values, df.loc[:,2].values
 
 
+def cleanAtran(wave,trans):
+    # Removes non-existent absorption from Atran models
+    from scipy.interpolate import interp1d
+    mask = np.zeros(np.size(wave), dtype=bool)
+    regions = [
+                [73.19,73.235],
+                [91.82,91.925],
+                [120.50,120.75],
+                [123.85,124.10],
+                [147.4,147.65],
+                [155.4,155.75],
+                [160.68,160.8],
+                [170.28,170.6],
+                [176.42,176.7],
+                ]   
+    for r in regions:
+        try:
+            mask[:] = False
+            m = (wave > r[0]) & (wave < r[1])
+            mask[m] = True
+            model = interp1d(wave[~mask],trans[~mask],kind='cubic',fill_value='extrapolate')
+            trans = model(wave)
+        except:
+            pass
+
+    # Little correction for a line (slide to the left)
+    try:
+        l = [144.3,144.34]
+        mask[:] = 0
+        ml = (wave > l[0]) & (wave < l[1])
+        mask[ml] = True
+        model = interp1d(wave[~mask],trans[~mask],kind='cubic',fill_value='extrapolate')
+        line = trans[ml] - model(wave[ml])
+        trans[ml] -= line
+        r= [144.12,144.5]
+        idx = np.where( (wave > r[0]) & (wave < r[1]))
+        idx = (np.array(idx))[0]
+        nidx = int(np.size(idx)*0.04/(r[1]-r[0]))
+        idxn = idx-nidx
+        trans[idxn] = trans[idx]
+        trans[ml] += line
+    except:
+        pass
+    
+    # Remove absorption by duplication
+    regions = [
+            [188,188.30],
+            ]
+    for r in regions:
+        try:
+            idx = np.where( (wave > r[0]) & (wave < r[1]))
+            idx = (np.array(idx))[0]
+            idxp = np.arange(-1,-np.size(idx),-1)+idx[0]+np.size(idx)*2+1
+            trans[idxp]=trans[idx[:-1]]
+        except:
+            pass
+        
+    # remove feature adding back line on the feature
+    lines = [
+            [[164.91,164.96]],
+            [[195.62,195.73]],
+            [[96.73,96.775]],
+            [[102.36,102.38]],
+            [[111.06,111.09]],
+            [[115.32,115.40]],
+            [[139.29,139.325]],
+            [[143.00,143.085]],
+            [[151.025,151.065]],
+            [[87.44,87.46],
+             [87.35,87.37]],
+            [[118.285,118.310],
+             [118.385,118.44]],
+            [[123.55,123.62]]
+            ]
+    bad = [
+            [164.80,165.20],
+            [195.55,196.1],
+            [96.725,96.875],
+            [102.23,102.45],
+            [110.99,111.1],
+            [115.30,115.60],
+            [139.20,139.50],
+            [142.9,143.30],
+            [150.9,151.3],
+            [87.35,87.47],
+            [118.25,118.47],
+            [123.2,123.7]
+            ]
+
+    for l_, b in zip(lines, bad):
+        try:
+            linefit = []
+            mls = []
+            for l in l_:
+                mask[:] = 0
+                ml = (wave > l[0]) & (wave < l[1])
+                mask[ml] = True
+                model = interp1d(wave[~mask],trans[~mask],kind='linear',fill_value='extrapolate')
+                line = trans[ml] - model(wave[ml])
+                trans[ml] -= line
+                linefit.append(line)
+                mls.append(ml)
+            mb = (wave > b[0]) & (wave < b[1])
+            mask[:] = False
+            mask[mb] = True
+            model = interp1d(wave[~mask],trans[~mask],kind='linear',fill_value='extrapolate')
+            trans[mb] = model(wave[mb])
+            # Add back lines
+            for line, ml in zip(linefit, mls):
+                trans[ml] += line
+        except:
+            pass
+    return trans
+    # Add emission feature
+    #regions = [
+    #    [139.16,139.5]
+    #]
+    #for r in regions:
+    #    m = (wave > r[0]) & (wave < r[1])
+    #    mask[:] = False
+    #    mask[m] = True
+    #    model = interp1d(wave[~mask],trans[~mask],kind='cubic',fill_value='extrapolate')
+    #    diff =  model(wave) - trans
+    #    trans[m] += 2*diff[m]
+        
+
+
 def getATransBlue2(altitude,za,wv,interp=False):
     from scipy.interpolate import interp1d
     from fifipy.spectra import getResolution
