@@ -205,8 +205,73 @@ def cleanAtran(wave,trans):
     #    trans[m] += 2*diff[m]
         
 
+def getATransBand(band, altitude, za, wv):
+    from fifipy.spectra import getResolution
+    # Get ATRAN model  
+    res = 0
+    i = 0
+    if band == 'B2':
+        w1 = 45
+        w2 = 80
+        i,wave,trans = callAtran(i,altitude,za,wv,w1,w2,res)
+    elif band == 'B1':
+        w1 = 60
+        w2 = 100
+        i,wave1,trans1 = callAtran(i,altitude,za,wv,w1,w2,res)
+        w1 = 100
+        w2 = 130
+        i,wave2,trans2 = callAtran(i,altitude,za,wv,w1,w2,res)
+        wave = np.concatenate([wave1, wave2])
+        trans = np.concatenate([trans1, trans2])
+    elif band == 'R':
+        w1 = 100
+        w2 = 155
+        i,wave1,trans1 = callAtran(i,altitude,za,wv,w1,w2,res)
+        w1 = 155
+        w2 = 210
+        i,wave2,trans2 = callAtran(i,altitude,za,wv,w1,w2,res)
+        wave = np.concatenate([wave1, wave2])
+        trans = np.concatenate([trans1, trans2])
 
-def getATransBlue2(altitude,za,wv,interp=False):
+    # clean ATRAN model
+    trans = cleanAtran(wave, trans)
+    
+    # Define grid
+    if band == 'B2':
+        w1 = 50
+        w2 = 75
+    elif band == 'B1':
+        w1 = 67
+        w2 = 125
+    elif band == 'R':
+        w1 = 105
+        w2 = 205
+
+    w = w1
+    wgrid = [w]    
+    while w < w2:
+        dw = w / getResolution('R', w)
+        w += dw/3.
+        wgrid.append(w)
+
+    # Convolve with spectral resolution
+    t = []
+    pi2 = np.sqrt(2 * np.pi)
+    for w in wgrid:
+        dw = w / getResolution(band, w)
+        s = dw/2.355
+        idx = (wave > (w-3*dw)) & (wave < (w+3*dw))  
+        ww = wave[idx]
+        tt = trans[idx]    
+        gg = np.exp(-0.5*((ww-w)/s)**2)/pi2/s
+        t.append(np.sum(gg*tt)/np.sum(gg))
+
+    wgrid = np.array(wgrid)
+    t = np.array(t)
+
+    return wgrid, t
+
+def getATransBlue2Old(altitude,za,wv,interp=False):
     from scipy.interpolate import interp1d
     from fifipy.spectra import getResolution
     
@@ -271,7 +336,7 @@ def getATransBlue2(altitude,za,wv,interp=False):
     # Return request
     return wave,trans
 
-def getATransBlue1(altitude,za,wv,interp=False):
+def getATransBlue1Old(altitude,za,wv,interp=False):
     from fifipy.spectra import getResolution
     from scipy.interpolate import interp1d
 
@@ -373,7 +438,7 @@ def getATrans(altitude, za, wv):
     # Return request
     return np.concatenate(wave), np.concatenate(trans)
 
-def getATransRed(altitude, za, wv,interp=False):
+def getATransRedOld(altitude, za, wv,interp=False):
     from scipy.interpolate import interp1d
     from fifipy.spectra import getResolution
 
