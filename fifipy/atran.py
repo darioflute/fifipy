@@ -250,7 +250,7 @@ def getATransBand(band, altitude, za, wv):
     w = w1
     wgrid = [w]    
     while w < w2:
-        dw = w / getResolution('R', w)
+        dw = w / getResolution(band, w)
         w += dw/3.
         wgrid.append(w)
 
