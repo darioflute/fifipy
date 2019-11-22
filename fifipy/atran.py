@@ -104,6 +104,33 @@ def cleanAtran(wave,trans):
         except:
             pass
 
+    # Better correction for feature at 147.4-147.65
+    try:
+        lines = [
+                [147.225, 147.375],
+                [147.66, 147.74]
+                ]
+        linefit = []
+        mls = []
+        for l in lines:
+            mask[:] = 0
+            ml = (wave > l[0]) & (wave < l[1])
+            mask[ml] = True
+            model = interp1d(wave[~mask],trans[~mask],kind='linear',fill_value='extrapolate')
+            line = trans[ml] - model(wave[ml])
+            trans[ml] -= line
+            linefit.append(line)
+            mls.append(ml)
+        id0 = int(np.argmin(np.abs(wave- 146.92)))
+        trans[id0:id0+360] = trans[id0-360:id0][::-1]
+        # Add back lines
+        for line, ml in zip(linefit, mls):
+            trans[ml] += line
+    except:
+        pass
+
+        
+
     # Little correction for a line (slide to the left)
     try:
         l = [144.3,144.34]
