@@ -100,6 +100,11 @@ def readResponse(array, dichroic, order, obsdate):
     response = interp1d(wr,fr,fill_value='extrapolate')
     return response
 
+def applyResponse(waves, fluxes, detchan, order, dichroic, obsdate):
+    response = readResponse(detchan, dichroic, order, obsdate)
+    for i in range(16):
+        for j in range(25):
+            fluxes[:,j,i] /= response(waves[:,j,i])    
 
 def computeSensitivity(responseDir, array, order, dichroic, waves, dwaves, error, exptime, obsdate):
     from matplotlib import rcParams

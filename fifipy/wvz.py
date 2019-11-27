@@ -10,6 +10,7 @@ def computeFluxes(group):
     from fifipy.io import readData
     from fifipy.fit import multiSlopes
     from fifipy.calib import waveCal, applyFlats
+    from fifipy.sensitivy import applyResponse
     import numpy as np
     from numpy import transpose
     c = 299792458.e+6 # um/s
@@ -46,7 +47,10 @@ def computeFluxes(group):
     waves = np.array(waves)
     fluxes = np.array(fluxes)
     # one obsdate is OK, since data are taken during the same day
-    fluxes = applyFlats(waves, fluxes, detchan, order, dichroic, obsdate)  
+    fluxes = applyFlats(waves, fluxes, detchan, order, dichroic, obsdate)
+    # Apply response
+    fluxes = applyResponse(waves, fluxes, detchan, order, dichroic, obsdate)
+    
     return waves, fluxes, detchan, order, za[0], altitude[0]
 
 def fitSlopesFile(file):
@@ -129,24 +133,43 @@ def computeMeanFlux(group, multi=True):
     flux = applyFlats(wave, flux, detchan, order, dichroic, obsdate) 
     return wave, flux, detchan, order, za[0], altitude[0]
 
-def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, computeAlpha=True):
+def computeAtran(waves, fluxes, detchan, order, za, altitude, 
+                 atrandata=None, computeAlpha=True, plot=True):
     import matplotlib.pyplot as plt
     from fifipy.calib import readAtran
     import statsmodels.api as sm
     import numpy as np
     from scipy.interpolate import interp1d
+    from scipy.signal import medfilt
     #import time
+    #from astropy import units as u
+    #from astropy.modeling.blackbody import blackbody_nu
+
+    
+    #temperature = -30 * u.Celsius
+    #angle = 36. * (180/np.pi*3600)**2
+    #Jy = 1.e-23
+
+    #for i in range(16):
+    #    for j in range(25):
+    #        wbb = waves[:,j,i]*u.micron
+    #        fbb_nu = blackbody_nu(wbb, temperature)
+    #        if detchan == 'RED':
+    #            fbb_nu = fbb_nu.value*angle*Jy*1.e12
+    #        else:
+    #            fbb_nu = fbb_nu.value*angle*Jy*2.e11
+    #        fluxes[:,j,i] -= fbb_nu
     
     # good = [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
     
     if detchan == 'RED':  
-        #good = [1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
-        good = [0,1,6,7,8,10,11,13,14,15,16,19,23]
+        good = [1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+        #good = [0,6,7,8,10,11,13,14,15,16,19,23]
     else:
         good = [1,2,6,7,8,11,12,13,16,17,20,21,22]
     wtot = np.ravel(waves[:,good,:])
     ftot = np.ravel(fluxes[:,good,:])
-    idx = (ftot > 0.1e-8)
+    idx = (ftot > 0.01e-8)
     wtot = wtot[idx]
     ftot = ftot[idx]
     lspec = sm.nonparametric.lowess(ftot,wtot, frac=0.03)
@@ -169,7 +192,11 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
             fluxes[:,i,:] *= alpha[i]
         wtot = np.ravel(waves[:,good,:])
         ftot = np.ravel(fluxes[:,good,:])
-        idx = (ftot > 0.1e-8)
+        idx = np.argsort(wtot)
+        wtot = wtot[idx]
+        ftot = ftot[idx]
+        df = ftot - medfilt(ftot, 31)
+        idx = (df > -0.1e-8)
         wtot = wtot[idx]
         ftot = ftot[idx]
         #lspec = sm.nonparametric.lowess(ftot,wtot, frac=0.03)
@@ -191,15 +218,24 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
     depth = -rcos + np.sqrt(rcos * rcos + 1 + 2 * r) # Taking into account curvature of Earth
     
     if detchan == 'BLUE':
+        # Subtract BB (interpolation between T ~ 1)
+        #lc1 = [61.55,61.70]
+        #lc2 = [62.00,62.10]
+        #id1 = ((wtot > lc1[0]) & (wtot < lc1[1])) 
+        #id2 = ((wtot > lc2[0]) & (wtot < lc2[1]))
+        #f1 = np.nanmean(ftot[id1])
+        #f2 = np.nanmean(ftot[id2])
+        #w1 = 0.5 * (lc1[0] + lc1[1])
+        #w2 = 0.5 * (lc2[0] + lc2[1])
+        #ftot -= np.interp(wtot, np.array([w1,w2]), np.array([f1,f2]))
         # Compute the normalized curve
-        lc = [62.00,62.10]
-        lm = [63.30,63.32]
-        idmin = (wtot > lc[0]) & (wtot < lc[1])
+        lc = [61.55,61.70]
+        lm = [63.30,63.34]
+        idmin = ((wtot > lc[0]) & (wtot < lc[1])) #| ((wtot > lc1[0]) & (wtot < lc1[1]))
         idmax = (wtot > lm[0]) & (wtot < lm[1])
         fmin = np.nanmean(ftot[idmin])
         fmax = np.nanmean(ftot[idmax])
         df = fmax - fmin
-        #fabs = 1-(flow-fmin)/df
         ftotabs = 1-(ftot-fmin)/df
         # Normalize at the same way the ATRAN models
         diff = []
@@ -230,50 +266,58 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
         except:
             pass
 
-        t = at[imin]**depth
-        tmax = np.nanmean(t[idmin])
-        tmin = np.nanmean(t[idmax])
-        t = (t-tmin)/(tmax-tmin) # Normalize
-        fig,axes = plt.subplots(1, 3, figsize=(16,5), sharey=True,
-                                gridspec_kw = {'width_ratios': [2,3,3]})
-        ax=axes[0]
-        ax.set_title('WVZ')
-        ax.plot(wvs,diff/np.nanmax(diff))#, 'o')
-        ax.grid()
-        ax=axes[1]
-        #for i in range(len(waves)):
-        for j in good:
-            ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.')
-        ax.set_xlim(61.45,62.19)
-        ax.set_ylim(-0.2,1.2)
-        #ax.plot( wlow,fabs)
-        ax.plot( wt,t,color='orange',linewidth=2)
-        ax.grid()
-        ax=axes[2]
-        for j in good:
-            ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.')
-        ax.set_xlim(63.01,63.75)
-        ax.set_ylim(-0.2,1.2)
-        ax.grid()
-        plt.subplots_adjust(wspace=0)
-        #ax.plot( wlow,fabs)
-        ax.plot( wt,t,color='orange',linewidth=2)
-        fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+
-                     ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
-        fig.subplots_adjust(top=0.9) 
-        plt.show()
+        if plot:
+            t = at[imin]**depth
+            tmax = np.nanmean(t[idmin])
+            tmin = np.nanmean(t[idmax])
+            t = (t-tmin)/(tmax-tmin) # Normalize
+            fig,axes = plt.subplots(1, 3, figsize=(16,5), sharey=True,
+                                    gridspec_kw = {'width_ratios': [2,3,3]})
+            ax=axes[0]
+            ax.set_title('WVZ')
+            ax.plot(wvs,diff/np.nanmax(diff))#, 'o')
+            ax.grid()
+            ax=axes[1]
+            for j in good:
+                ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.')
+            ax.set_xlim(61.45,62.19)
+            ax.set_ylim(-0.3,1.2)
+            ax.plot( wt,t,color='orange',linewidth=2)
+            ax.grid()
+            ax=axes[2]
+            for j in good:
+                ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.')
+            ax.set_xlim(63.01,63.75)
+            ax.set_ylim(-0.3,1.2)
+            ax.grid()
+            plt.subplots_adjust(wspace=0)
+            ax.plot( wt,t,color='orange',linewidth=2)
+            fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+
+                         ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
+            fig.subplots_adjust(top=0.9) 
+            plt.show()
     else:
-        lc = [148.1,148.3]
-        lm = [146.7,146.9]
+        # Subtract BB (interpolation between T ~ 1)
+        #lc1 = [145.65, 145.85]
+        #lc2 = [149.3, 149.6]
+        #id1 = ((wtot > lc1[0]) & (wtot < lc1[1])) 
+        #id2 = ((wtot > lc2[0]) & (wtot < lc2[1]))
+        #f1 = np.nanmean(ftot[id1])
+        #f2 = np.nanmean(ftot[id2])
+        #w1 = 0.5 * (lc1[0] + lc1[1])
+        #w2 = 0.5 * (lc2[0] + lc2[1])
+        #ftot -= np.interp(wtot, np.array([w1,w2]), np.array([f1,f2]))
+        #lc = [148.1,148.3]
+        lc = [149.3, 149.6]
+        lm = [146.8,147]
         idmin = (wtot > lc[0]) & (wtot < lc[1])
         idmax = (wtot > lm[0]) & (wtot < lm[1])
         fmin = np.nanmean(ftot[idmin])
         fmax = np.nanmean(ftot[idmax])
         df = fmax - fmin
-        #fabs = 1-(flow-fmin)/df
         ftotabs = 1-(ftot-fmin)/df
         # Normalize at the same way the ATRAN models
-        diff = []
+        diff = []     
         idmin = (wt > lc[0]) & (wt < lc[1])
         idmax = (wt > lm[0]) & (wt < lm[1])
         for t,wv in zip(at,wvs):
@@ -300,33 +344,139 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude, atrandata=None, co
         except:
             pass
 
-        t = at[imin]**depth
-        tmax = np.nanmean(t[idmin])
-        tmin = np.nanmean(t[idmax])
-        t = (t-tmin)/(tmax-tmin) # Normalize
-        fig,axes = plt.subplots(1,2,figsize=(16,5),sharey=True, 
-                                gridspec_kw = {'width_ratios': [2,6]})
-        ax=axes[0]
-        ax.set_title('WVZ')
-        ax.plot(wvs,diff/np.nanmax(diff))#,'o')
-        ax.grid()
-        ax=axes[1]
-        for j in good:
-            ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.',label=str(j))
-        ax.legend()
-        ax.set_ylim(-0.2,1.2)
-        ax.set_xlim(np.nanmin(wtot),np.nanmax(wtot))
-        ax.plot( wt,t,color='orange',linewidth=2)
-        ax.grid()
-        fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+ 
-                     ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
-        plt.subplots_adjust(wspace=0)
-        fig.subplots_adjust(top=0.9) 
-        plt.show()
+        if plot:
+            t = at[imin]**depth
+            tmax = np.nanmean(t[idmin])
+            tmin = np.nanmean(t[idmax])
+            t = (t-tmin)/(tmax-tmin) # Normalize
+            fig,axes = plt.subplots(1,2,figsize=(16,5),sharey=True, 
+                                    gridspec_kw = {'width_ratios': [2,6]})
+            ax=axes[0]
+            ax.set_title('WVZ')
+            ax.plot(wvs,diff/np.nanmax(diff))#,'o')
+            ax.grid()
+            ax=axes[1]
+            for j in good:
+                ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.',label=str(j))
+            ax.set_ylim(-0.3,1.2)
+            ax.set_xlim(np.nanmin(wtot),np.nanmax(wtot))
+            ax.plot( wt,t,color='orange',linewidth=2)
+            ax.grid()
+            fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+ 
+                         ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
+            plt.subplots_adjust(wspace=0)
+            fig.subplots_adjust(top=0.9) 
+            plt.show()
+    return wvmin, alpha, wtot, ftotabs
+
+def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
+    import numpy as np
+    import matplotlib.pyplot as plt
         
+    wtr, atranr, altitudes, wvs = atran1
+    wtb, atranb, altitudes, wvs = atran2
+    imin = np.argmin(np.abs(altitudes-altitude))
+    atr = atranr[imin]
+    atb = atranb[imin]
+        
+    angle = za * np.pi/180.
+    cos_angle = np.cos(angle)
+    r = 6383.5/50.  # assuming r_earth = 6371 km, altitude = 12.5 km, and 50 km of more stratosphere
+    rcos = r * cos_angle
+    depth = -rcos + np.sqrt(rcos * rcos + 1 + 2 * r) # Taking into account curvature of Earth
+    
+    # Blue
+    lc = [61.55,61.70]
+    lm = [63.30,63.34]
+    idbmin = (wtb > lc[0]) & (wtb < lc[1])
+    idbmax = (wtb > lm[0]) & (wtb < lm[1])
+    
+    lc = [149.3, 149.6]
+    lm = [146.8,147.0]
+    idrmin = (wtr > lc[0]) & (wtr < lc[1])
+    idrmax = (wtr > lm[0]) & (wtr < lm[1])
+    
+    diff = []
+    for tr, tb, wv in zip(atr, atb, wvs):
+        tb = tb**depth  # Apply the ZA
+        tmax = np.nanmean(tb[idbmin])
+        tmin = np.nanmean(tb[idbmax])
+        tb = (tb-tmin)/(tmax-tmin)  # Normalize
+        tbi  = np.interp(wblue,wtb,tb)
+        idxb = fblue < 1.1
+        tr = tr**depth  # Apply the ZA
+        tmax = np.nanmean(tr[idrmin])
+        tmin = np.nanmean(tr[idrmax])
+        tr = (tr-tmin)/(tmax-tmin)  # Normalize
+        tri  = np.interp(wred,wtr,tr)
+        idxr = fred < 1.1
+        diff.append(np.nanmean((tbi[idxb] - fblue[idxb])**2) +
+                    np.nanmean((tri[idxr] - fred[idxr])**2))
+            
+    diff = np.array(diff)
+    imin = np.argmin(diff)
+    wvmin = wvs[imin]
+    
+    try:
+        x1=wvs[imin-1]
+        x2=wvs[imin]
+        x3=wvs[imin+1]
+        y1=diff[imin-1]
+        y2=diff[imin]   
+        y3=diff[imin+1]
+        b = np.array([[x1*x1,y1,1],[x2*x2,y2,1],[x3*x3,y3,1]])
+        a = np.array([[y1,x1,1],[y2,x2,1],[y3,x3,1]])
+        wvmin = -0.5 * np.linalg.det(b)/np.linalg.det(a)
+    except:
+        pass
+        print('parabola not fitted')
+
+    
+
+    tb = atb[imin]**depth
+    tmax = np.nanmean(tb[idbmin])
+    tmin = np.nanmean(tb[idbmax])
+    tb = (tb-tmin)/(tmax-tmin) # Normalize
+    tr = atr[imin]**depth
+    tmax = np.nanmean(tr[idrmin])
+    tmin = np.nanmean(tr[idrmax])
+    tr = (tr-tmin)/(tmax-tmin) # Normalize
 
 
-    return wvmin, alpha
+    fig,axes = plt.subplots(1, 4, figsize=(16,5), sharey=True,
+                                gridspec_kw = {'width_ratios': [1,1,1,2]})
+    ax=axes[0]
+    ax.set_title('WVZ')
+    ax.plot(wvs,diff/np.nanmax(diff))#, 'o')
+    ax.grid()
+    ax=axes[1]
+    ax.plot(wblue, fblue,'.')
+    ax.set_xlim(61.45,62.19)
+    ax.set_ylim(-0.3,1.2)
+    ax.plot( wtb,tb,color='orange',linewidth=2)
+    ax.grid()
+    ax=axes[2]
+    ax.plot(wblue, fblue,'.')
+    ax.set_xlim(63.01,63.75)
+    ax.set_ylim(-0.3,1.2)
+    ax.grid()
+    plt.subplots_adjust(wspace=0)
+    ax.plot( wtb,tb,color='orange',linewidth=2)
+    ax=axes[3]
+    ax.plot(wred, fred,'.',color='red')
+    ax.set_xlim(145.6, 149.9)
+    ax.set_ylim(-0.3,1.2)
+    ax.grid()
+    plt.subplots_adjust(wspace=0)
+    ax.plot( wtr,tr,color='orange',linewidth=2)
+        
+    fig.suptitle('Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+
+                     ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
+    fig.subplots_adjust(top=0.9) 
+    plt.show()
+    
+    return wvmin
+
 
 def getGroups(wvzdir, flight):
     from glob import glob as gb
@@ -346,7 +496,7 @@ def getGroups(wvzdir, flight):
         
     return groups
 
-def flightPlots(lwgroups, alt, wblue, wred, title):
+def flightPlots(lwgroups, alt, wblue, wred, wtot, title):
     from matplotlib import rcParams
     import matplotlib.pyplot as plt
     rcParams['font.family']='STIXGeneral'
@@ -401,6 +551,8 @@ def flightPlots(lwgroups, alt, wblue, wred, title):
     ax = axes[2]
     ax.loglog(time,wblue, 'o', color='blue',label='blue')
     ax.loglog(time,wred, 'o', color='red',label='red')
+    ax.loglog(time,wtot, 'o', color='black',label='red + blue',
+              markerfacecolor='None', markersize=15)
     ax.loglog(time,wmon, 'o', color='green',label='monitor')
     for axis in [ax.xaxis, ax.yaxis]:
         formatter = ScalarFormatter()
