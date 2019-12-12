@@ -102,31 +102,43 @@ def computeFlatRed(wwaves,sspectra,sspatspectra,ispax,ispex,minflat=0.5,maxflat=
         # Mask variable values
         med = medfilt(fi,21)
         mad = medfilt(np.abs(fi-med))
-        m = np.abs(fi-med) > 3*mad
+        m = np.abs(fi-med) > 5*mad
         fi[m] = np.nan
         # append
         w.append(wi)
         f.append(fi)
-
+        
     # Discard highly deviant flats
     f = np.array(f)
     w = np.array(w)
-    mf = np.nanmedian(f, axis = 1)
-    med = np.nanmedian(mf)
-    mad = np.nanmedian(np.abs(med-mf))
-    mask = np.abs(med - mf) < 10*mad
+    mf = np.nanmedian(f, axis = 1, keepdims=True)
+    df = f - mf
+    med = np.nanmedian(df, axis = 1, keepdims=True)
+    mad = np.nanmedian(np.abs(med-df), axis = 1, keepdims=True)
+    mask = np.abs(med - df) < 10*mad
     w = w[mask]
     f = f[mask]
+
+
+    # Discard highly deviant flats
+    #f = np.array(f)
+    #w = np.array(w)
+    #mf = np.nanmedian(f, axis = 1)
+    #med = np.nanmedian(mf)
+    #mad = np.nanmedian(np.abs(med-mf))
+    #mask = np.abs(med - mf) < 10*mad
+    #w = w[mask]
+    #f = f[mask]
         
     # concatenate
-    try:
-        w=np.concatenate(w); f=np.concatenate(f)
-        m = np.isfinite(f)
-        w=w[m]
-        f=f[m]
-    except:
-        print("There are no arrays to concatenate")
-        return None
+    #try:
+    #    w=np.concatenate(w); f=np.concatenate(f)
+    #    m = np.isfinite(f)
+    #    w=w[m]
+    #    f=f[m]
+    #except:
+    #    print("There are no arrays to concatenate")
+    #    return None
     
     idx = np.argsort(w); w=w[idx]; f=f[idx]
     # making wavelengths unique
@@ -183,33 +195,45 @@ def computeFlatBlue(wwaves,sspectra,sspatspectra,ispax,ispex,minflat=0.6,maxflat
             # Mask variable values
             med = medfilt(fi[idxm],21)
             mad = medfilt(np.abs(fi[idxm]-med))
-            m2 = np.abs(fi[idxm]-med) > 3*mad
+            m2 = np.abs(fi[idxm]-med) > 5*mad
             if np.sum(m2) > 0:
                 idx = np.concatenate(np.argwhere(m2))
                 fi[idxm[idx]] = np.nan
         # append
         w.append(wi)
         f.append(fi)
-
+        
     # Discard highly deviant flats
     f = np.array(f)
     w = np.array(w)
-    mf = np.nanmedian(f, axis = 1)
-    med = np.nanmedian(mf)
-    mad = np.nanmedian(np.abs(med-mf))
-    mask = np.abs(med - mf) < 10*mad
+    mf = np.nanmedian(f, axis = 1, keepdims=True)
+    df = f - mf
+    med = np.nanmedian(df, axis = 1, keepdims=True)
+    mad = np.nanmedian(np.abs(med-df), axis = 1, keepdims=True)
+    mask = np.abs(med - df) < 10*mad
     w = w[mask]
     f = f[mask]
+
+
+    # Discard highly deviant flats
+    #f = np.array(f)
+    #w = np.array(w)
+    #mf = np.nanmedian(f, axis = 1)
+    #med = np.nanmedian(mf)
+    #mad = np.nanmedian(np.abs(med-mf))
+    #mask = np.abs(med - mf) < 10*mad
+    #w = w[mask]
+    #f = f[mask]
         
     # concatenate
-    try:
-        w=np.concatenate(w); f=np.concatenate(f)
-        m = np.isfinite(f)
-        w=w[m]
-        f=f[m]
-    except:
-        print("There are no arrays to concatenate")
-        return None
+    #try:
+    #    w=np.concatenate(w); f=np.concatenate(f)
+    #    m = np.isfinite(f)
+    #    w=w[m]
+    #    f=f[m]
+    #except:
+    #    print("There are no arrays to concatenate")
+    #    return None
     
     idx = np.argsort(w); w=w[idx]; f=f[idx]
     # making wavelengths unique

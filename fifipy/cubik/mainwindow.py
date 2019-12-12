@@ -107,7 +107,7 @@ class GUI (QMainWindow):
             print('Reading file ', infile)
             self.specCube = spectralCube(infile)
             print('Reading CAL files from ', path)
-            self.specCloud = spectralCloud(path)
+            self.specCloud = spectralCloud(path, self.specCube.pixscale)
         except:
             print('The spectral cube cannot be read')
             

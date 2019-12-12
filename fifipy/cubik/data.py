@@ -18,6 +18,7 @@ class spectralCube(object):
         self.X = hdl['X'].data
         self.Y = hdl['Y'].data
         self.R = self.header['RESOLUN']  # spectral resolution
+        self.pixscale = self.header['PIXSCAL']
         utrans = hdl['UNSMOOTHED_TRANSMISSION'].data
         self.wt = utrans[0,:]
         self.at = utrans[1,:]
@@ -41,7 +42,7 @@ class spectralCube(object):
 class spectralCloud(object):
     """Cloud of points from CAL files."""
     
-    def __init__(self, path):
+    def __init__(self, path, pixscale):
         calfiles = fnmatch.filter(os.listdir(path),"*CAL*.fits")
         nstack = 0
         for calfile in calfiles:
@@ -53,6 +54,7 @@ class spectralCloud(object):
             #dy = header['dbet_map']
             obslam = header['obslam']
             obsbet = header['obsbet']
+            channel = header['DETCHAN']
             #dx = header['dlam_map']
             #dy = header['dbet_map']
             #detangle = header['det_angl']
@@ -61,7 +63,11 @@ class spectralCloud(object):
             #sa = np.sin(detangle * np.pi / 180.)
             ys = data.YS / 3600. + obsbet
             xs = -data.XS / 3600. / np.cos( ys * np.pi / 180.) + obslam
-            fs = data.UNCORRECTED_DATA /36.   # Normalize for standard resampling 6x6
+            if channel == 'RED':
+                pixfactor = (12.2*12.5)/pixscale**2 # size of pixels from Colditz et al. 2018
+            else:
+                pixfactor = (6.14*6.25)/pixscale**2
+            fs = data.UNCORRECTED_DATA / pixfactor   # Normalize for resampling
             ws = data.LAMBDA
             ns,nz,ny,nx = np.shape(ws)
             for i in range(ns):
