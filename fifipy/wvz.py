@@ -211,11 +211,19 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
     imin = np.argmin(np.abs(altitudes-altitude))
     at = atran[imin]
     angle = za * np.pi/180.
-    cos_angle = np.cos(angle)
     #depth = 1. / cos_angle  # Flat Earth approximation
-    r = 6383.5/50.  # assuming r_earth = 6371 km, altitude = 12.5 km, and 50 km of more stratosphere
-    rcos = r * cos_angle
-    depth = -rcos + np.sqrt(rcos * rcos + 1 + 2 * r) # Taking into account curvature of Earth
+    # Another way
+    #cos_angle = np.cos(angle)    
+    #r = 6383.5/50.  # assuming r_earth = 6371 km, altitude = 12.5 km, and 50 km of more stratosphere
+    #rcos = r * cos_angle
+    #depth = -rcos + np.sqrt(rcos * rcos + 1 + 2 * r) # Taking into account curvature of Earth
+    
+    a = 6371 + 12.5  # Earth radius + altitude (~12.5 km)
+    b = a + 50.      # a + rest of atmosphere (~ 50 km)
+    alpha = np.arcsin(a/b * np.sin(angle)) # From law of sinus
+    dx = np.sqrt(a*a + b*b - 2*a*b*np.cos(angle-alpha)) # From law of cosinus
+    depth = dx / 50.
+    
     
     if detchan == 'BLUE':
         # Subtract BB (interpolation between T ~ 1)

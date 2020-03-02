@@ -28,8 +28,8 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
     dates = np.zeros(ndates)
     for i in range(ndates):
         dates[i] = wvdf.columns[2 + i * 4][0]
+    # print('Dates: ', dates)
 
-    # Select correct date
     # Select correct date
     for i, date in enumerate(dates):
         if date < odate:
@@ -37,6 +37,7 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
         else:
             break
     cols = range(2 + 4 * i , 2 + 4 * i + 4)
+    # print('Selected columns are: ', cols)
     w1 = wvdf[wvdf.columns[cols]].copy()
     if channel == 'R':
         if dichroic == 105:
