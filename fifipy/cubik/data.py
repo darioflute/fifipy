@@ -42,10 +42,10 @@ class spectralCube(object):
 class spectralCloud(object):
     """Cloud of points from CAL files."""
     
-    def __init__(self, path, pixscale):
-        calfiles = fnmatch.filter(os.listdir(path),"*CAL*.fits")
+    def __init__(self, path, pixscale, extension='CAL'):
+        calfiles = fnmatch.filter(os.listdir(path),"*"+extension+"*.fits")
         nstack = 0
-        for calfile in calfiles:
+        for calfile in sorted(calfiles):
             hlf = fits.open(os.path.join(path, calfile))
             header = hlf['PRIMARY'].header
             data = hlf[1].data
@@ -62,7 +62,7 @@ class spectralCloud(object):
             #ca = np.cos(detangle * np.pi / 180.)
             #sa = np.sin(detangle * np.pi / 180.)
             ys = data.YS / 3600. + obsbet
-            xs = -data.XS / 3600. / np.cos( ys * np.pi / 180.) + obslam
+            xs = data.XS / 3600. / np.cos( ys * np.pi / 180.) + obslam
             if channel == 'RED':
                 pixfactor = (12.2*12.5)/pixscale**2 # size of pixels from Colditz et al. 2018
             else:
