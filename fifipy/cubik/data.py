@@ -24,9 +24,10 @@ class spectralCube(object):
         self.at = utrans[1,:]
         D = 2.5 #m
         lam = np.nanmean(self.wave)*1.e-6
-        fwhm = 1.01 * lam / D * 180 / np.pi * 3600  
-        sigma = fwhm / 2.355
-        self.radius =  sigma * 1.9
+        #fwhm = 1.01 * lam / D * 180 / np.pi * 3600 #mirror with obstruction  
+        fwhm = 1.22 * lam / D * 180 / np.pi * 3600 #mirror without obstruction (close to resolution of FIFI-LS)  
+        #sigma = fwhm / 2.355
+        self.radius =  fwhm * 0.5 * 1.5 # kernel 1.5x the FWHM
         self.channel = self.header['DETCHAN']        
         if self.channel == 'BLUE':
             self.order = self.header["G_ORD_B"]
@@ -62,11 +63,14 @@ class spectralCloud(object):
             #ca = np.cos(detangle * np.pi / 180.)
             #sa = np.sin(detangle * np.pi / 180.)
             ys = data.YS / 3600. + obsbet
-            xs = data.XS / 3600. / np.cos( ys * np.pi / 180.) + obslam
+            xs = - data.XS / 3600. / np.cos( ys * np.pi / 180.) + obslam
+            platscale = header['PLATSCAL']
             if channel == 'RED':
-                pixfactor = (12.2*12.5)/pixscale**2 # size of pixels from Colditz et al. 2018
+                #pixfactor = (12.2*12.5)/pixscale**2 # size of pixels from Colditz et al. 2018
+                pixfactor = (platscale*3/pixscale)**2
             else:
-                pixfactor = (6.14*6.25)/pixscale**2
+                #pixfactor = (6.14*6.25)/pixscale**2
+                pixfactor = (platscale*1.5/pixscale)**2
             fs = data.UNCORRECTED_DATA / pixfactor   # Normalize for resampling
             ws = data.LAMBDA
             ns,nz,ny,nx = np.shape(ws)
@@ -121,17 +125,67 @@ class Spectrum(object):
         self.colors = np.array(colors)
         
     def set_filter(self, delta, radius):
-        self.delta = delta #* 1.5
-        flux = []
+        self.delta = delta * 0.5  # Half of the FWHM 
+        flux1 = []
         n = []
+        # Compute the number of points for spectral resolution
         for wm in self.wave:
+            idx = np.abs(self.w - wm) <= self.delta
+            n.append(np.sum(idx))
+            
+        # Weight the delta as a function of the median
+        n = np.array(n)
+        n90 = np.percentile(n, 90, interpolation = 'midpoint') 
+        deltas = []
+        # First run
+        for wm, nm in zip(self.wave, n):
+            delta = self.delta * np.sqrt(n90 / nm) # Adjust interval
+            deltas.append(delta)
             idx = np.abs(self.w - wm) <= delta
             fi = self.f[idx]
             wi = self.w[idx]
             di = self.d[idx] / radius
-            n.append(np.sum(idx))
             dw = (wi - wm) / delta
-            wt = 0.5 * (1 - (dw**2 + di**2))**2  # Biweight
-            flux.append(np.sum(fi*wt)/np.sum(wt))
+            wt = (1 - di**2)**2 * (1 - dw**2)**2 # Biweight
+            f0 = np.sum(fi*wt)/np.sum(wt)
+            flux1.append(f0)
+        # Rejection of outliers
+        flux1 = np.array(flux1)
+        flux = []
+        noise = []
+        nn = []
+        wr = []
+        fr = []
+        for wm, nm, delta in zip(self.wave, n, deltas):
+            idx = np.abs(self.w - wm) <= delta
+            nn.append(np.sum(idx))
+            fi = self.f[idx]
+            wi = self.w[idx]
+            di = self.d[idx] / radius
+            dw = (wi - wm) / delta
+            idf = np.isfinite(flux1)
+            residual = fi - np.interp(wi, self.wave[idf], flux1[idf])
+            m0 = np.nanmedian(residual)
+            m1 = np.nanmedian(np.abs(residual - m0))
+            idx = np.abs(residual) < 3 * m1
+            wr.extend(wi[~idx])
+            fr.extend(fi[~idx])
+            fi = fi[idx]
+            wi = wi[idx]
+            di = di[idx]
+            dw = dw[idx]
+            wt = (1 - di**2)**2 * (1 - dw**2)**2
+            wtsum = np.sum(wt)
+            nt = len(wt)
+            f0 = np.sum(fi * wt) / wtsum
+            e2 = np.nansum((nt*wt*fi/wtsum - f0)**2)/(nt-1)
+            flux.append(f0)
+            noise.append(np.sqrt(e2/nt))
+        
         self.fflux = np.array(flux)
+        self.noise = np.array(noise)
         self.nflux = np.array(n)
+        self.deltas = np.array(deltas)
+        self.nn = np.array(nn)
+        self.wrejected = np.array(wr)
+        self.frejected = np.array(fr)

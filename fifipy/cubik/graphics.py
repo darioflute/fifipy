@@ -285,7 +285,7 @@ class ImageCanvas(MplCanvas):
         #print(xy0)
         #x0 = xy0[:,0]/self.pixscale
         #y0 = xy0[:,1]/self.pixscale
-        self.axes.scatter(xy[:,0], xy[:,1], s=5, color='blue',transform=self.axes.get_transform('world'))
+        self.axes.scatter(xy[:,0], xy[:,1], s=5, color='blue',transform=self.axes.get_transform('fk5'))
         # Cursor data format
         def format_coord(x,y):
             """ Redefine how to show the coordinates """
@@ -314,11 +314,13 @@ class SpectrumCanvas(MplCanvas):
         self.ax2 = self.fig.add_subplot(gs[1, 0])
         self.ax3 = self.fig.add_subplot(gs[2, 0])
         self.ax4 = self.ax3.twinx()
+        self.ax5 = self.ax3.twinx()
         #self.ax1 = self.fig.add_axes([0.12,0.03,.8,.18])
         #self.ax2 = self.fig.add_axes([0.12,0.22,.8,.38])
         #self.ax3 = self.fig.add_axes([0.12,0.62,.8,.38])
         self.ax3.tick_params(axis='y', labelcolor='tab:red')
         self.ax4.tick_params(axis='y', labelcolor='tab:blue')
+        self.ax5.tick_params(axis='y', labelcolor='tab:orange')
         self.fig.subplots_adjust(wspace=0, hspace=0)
    
     def compute_initial_spectrum(self, spectrum=None, xmin=None, xmax=None):
@@ -333,7 +335,7 @@ class SpectrumCanvas(MplCanvas):
             self.setFocus()
 
     def drawSpectrum(self):
-        for ax in [self.ax1, self.ax2, self.ax3]:
+        for ax in [self.ax1, self.ax2, self.ax3, self.ax5]:
             ax.clear()
             ax.grid(True, which='both')
             ax.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
@@ -342,14 +344,23 @@ class SpectrumCanvas(MplCanvas):
         nmedian = np.nanmedian(s.nflux)
         idx = s.nflux > (nmedian * 0.5)
         self.ax1.scatter(s.w, s.f,  s=2, color=s.colors)
+        self.ax1.scatter(s.wrejected, s.frejected, s=4, color='red')
         for ax in [self.ax1, self.ax2]:
+            ax.fill_between(s.wave[idx], s.fflux[idx]-s.noise[idx], s.fflux[idx]+s.noise[idx], color='green', alpha=0.2)
             ax.plot(s.wave[idx], s.flux[idx], color='blue', label='Cube')
             ax.plot(s.wave[idx], s.fflux[idx], color='green', label='Filter')  
             ax.plot(s.wave[~idx], s.flux[~idx], color='blue', alpha=0.3)
             ax.plot(s.wave[~idx], s.fflux[~idx], color='green', alpha=0.3)  
         self.ax2.legend()
+        ff = np.concatenate((s.flux[idx], s.fflux[idx]))
+        minf = np.nanmin(ff)
+        maxf = np.nanmax(ff)
+        diff = 0.1 * (maxf - minf)
+        self.ax2.set_ylim(minf - diff, maxf + diff)
         self.ax3.plot(s.wave, s.nflux, color='tab:red')
+        self.ax3.plot(s.wave, s.nn, color='tab:pink')
         self.ax4.plot(s.wt, s.at, color='tab:blue')
+        self.ax5.plot(s.wave, s.deltas, color='tab:orange')
         self.ax3.set_xlabel('Wavelength [$\\mu$m]')
         self.ax1.set_ylabel('Cloud')
         self.ax2.set_ylabel('Flux')
@@ -358,4 +369,6 @@ class SpectrumCanvas(MplCanvas):
         mw = np.nanmedian(s.wave)
         d  = s.delta
         self.ax3.plot([mw-d, mw+d], np.ones(2) * nmedian, color='green')
+        d = np.nanmedian(s.deltas)
+        self.ax3.plot([mw-d, mw+d], np.ones(2) * nmedian * 0.5, color='orange')
         self.draw_idle()

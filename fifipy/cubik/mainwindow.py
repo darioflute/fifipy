@@ -141,7 +141,8 @@ class GUI (QMainWindow):
         # Communicate new spectrum to spectral window
         s = self.specCube
         medw = np.nanmedian(s.wave)
-        self.delta = medw/s.R/2.355  # spectral resolution in wavelength (FWHM = 2.355 * sigma)
+        #self.delta = medw/s.R/2.355  # spectral resolution in wavelength (FWHM = 2.355 * sigma)
+        self.delta = medw/s.R # spectral resolution in wavelength (FWHM = 2.355 * sigma)
         print('window size in wavelength ', self.delta)
         self.onModifiedAperture('initial aperture')
         
