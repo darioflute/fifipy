@@ -14,6 +14,7 @@ class spectralCube(object):
         self.wcs = WCS(self.header).celestial
         self.objname = self.header['OBJ_NAME']
         self.flux = hdl['UNCORRECTED_FlUX'].data
+        self.eflux = hdl['UNCORRECTED_ERROR'].data
         self.wave = hdl['wavelength'].data
         self.X = hdl['X'].data
         self.Y = hdl['Y'].data
@@ -95,9 +96,10 @@ class spectralCloud(object):
         
 class Spectrum(object):
     """Spectrum at coordinate."""
-    def __init__(self, wave, flux, w, f, distance, wt, at):
+    def __init__(self, wave, flux, eflux, w, f, distance, wt, at):
         self.wave = wave
         self.flux = flux
+        self.eflux = eflux
         self.w = w
         self.f = f
         self.d = distance
@@ -164,23 +166,28 @@ class Spectrum(object):
             di = self.d[idx] / radius
             dw = (wi - wm) / delta
             idf = np.isfinite(flux1)
-            residual = fi - np.interp(wi, self.wave[idf], flux1[idf])
-            m0 = np.nanmedian(residual)
-            m1 = np.nanmedian(np.abs(residual - m0))
-            idx = np.abs(residual) < 3 * m1
-            wr.extend(wi[~idx])
-            fr.extend(fi[~idx])
-            fi = fi[idx]
-            wi = wi[idx]
-            di = di[idx]
-            dw = dw[idx]
-            wt = (1 - di**2)**2 * (1 - dw**2)**2
-            wtsum = np.sum(wt)
-            nt = len(wt)
-            f0 = np.sum(fi * wt) / wtsum
-            e2 = np.nansum((nt*wt*fi/wtsum - f0)**2)/(nt-1)
+            if np.sum(idf) > 10:
+                residual = fi - np.interp(wi, self.wave[idf], flux1[idf])
+                m0 = np.nanmedian(residual)
+                m1 = np.nanmedian(np.abs(residual - m0))
+                idx = np.abs(residual) < 3 * m1
+                wr.extend(wi[~idx])
+                fr.extend(fi[~idx])
+                fi = fi[idx]
+                wi = wi[idx]
+                di = di[idx]
+                dw = dw[idx]
+                wt = (1 - di**2)**2 * (1 - dw**2)**2
+                wtsum = np.sum(wt)
+                nt = len(wt)
+                f0 = np.sum(fi * wt) / wtsum
+                e2 = np.nansum((nt*wt*fi/wtsum - f0)**2)/(nt-1)
+                e0 = np.sqrt(e2/nt)
+            else:
+                f0 = 0
+                e0 = 0
             flux.append(f0)
-            noise.append(np.sqrt(e2/nt))
+            noise.append(e0)
         
         self.fflux = np.array(flux)
         self.noise = np.array(noise)

@@ -164,7 +164,8 @@ class GUI (QMainWindow):
         pdistance = np.hypot(s.points[:,0] - xc, s.points[:,1] - yc)
         imin = np.argmin(pdistance)
         flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
-        self.sc.spectrum = Spectrum(s.wave, flux, w, f, dists, s.wt, s.at)
+        eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
+        self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, s.at)
         self.sc.spectrum.set_colors()
         #print('delta, radius ', self.delta, radius)
         self.sc.spectrum.set_filter(self.delta, radius)
