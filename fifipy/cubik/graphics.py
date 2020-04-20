@@ -348,8 +348,8 @@ class SpectrumCanvas(MplCanvas):
         for ax in [self.ax1, self.ax2]:
             ax.fill_between(s.wave[idx], s.fflux[idx]-s.noise[idx], s.fflux[idx]+s.noise[idx], color='green', alpha=0.2)
             ax.fill_between(s.wave[idx], s.flux[idx]-s.eflux[idx], s.flux[idx]+s.eflux[idx], color='blue', alpha=0.2)
-            ax.plot(s.wave[idx], s.flux[idx], color='blue', label='Cube')
-            ax.plot(s.wave[idx], s.fflux[idx], color='green', label='Filter')  
+            ax.plot(s.wave[idx], s.flux[idx], color='blue', label='Pipeline Cube')
+            ax.plot(s.wave[idx], s.fflux[idx], color='green', label='Biweight filter')  
             ax.plot(s.wave[~idx], s.flux[~idx], color='blue', alpha=0.3)
             ax.plot(s.wave[~idx], s.fflux[~idx], color='green', alpha=0.3)  
         self.ax2.legend()

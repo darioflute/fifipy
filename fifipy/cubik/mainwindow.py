@@ -70,6 +70,7 @@ class GUI (QMainWindow):
         file = bar.addMenu("File")
         file.addAction(QAction("Quit",self,shortcut='Ctrl+q',triggered=self.fileQuit))
         file.addAction(QAction("Open cube",self,shortcut='Ctrl+n',triggered=self.newFile))
+        file.addAction(QAction("Compute new uncertainty",self,shortcut='Ctrl+n',triggered=self.newUncertainty))
         bar.setNativeMenuBar(False)
 
     def fileQuit(self):
@@ -167,10 +168,64 @@ class GUI (QMainWindow):
         eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
         self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, s.at)
         self.sc.spectrum.set_colors()
-        #print('delta, radius ', self.delta, radius)
-        self.sc.spectrum.set_filter(self.delta, radius)
-        #print('updating spectrum ... ')
+        self.sc.spectrum.set_filter(self.delta, radius, s.pixscale)
         self.sc.drawSpectrum()
+        
+        
+        
+    def newUncertainty(self, event):
+        """ Compute and save new uncertainty for the WXY file. """
+        aperture = self.CI.circle
+        s = self.specCube
+        sc = self.specCloud
+        radius = aperture.radius
+        nz, ny, nx = np.shape(s.eflux)
+        uncertainty = np.empty((nz, ny, nx))
+        idx = np.isnan(s.eflux)
+        uncertainty[idx] = np.nan
+        xyerror = np.nanmedian(s.eflux, axis=0)
+        idy, idx = np.where(np.isfinite(xyerror))
+        # Compute the uncertainty for all the spatial pixels in the list
+        x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)  
+        areafactor = (s.pixscale/radius)**2/np.pi
+        
+        from dask import delayed, compute
+        from fifipy.cubik.data import computeNoise
+        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, self.delta, x0, y0, radius, areafactor, (idx[i],idy[i])) for i in range(len(idx))]
+
+        print('Starting the computation of uncertainty for ',len(idx),' points')
+        inoise = compute(* pixels, scheduler='processes')
+        #noise = [n for n in inoise]
+        print('Storing data')        
+        for i, j, noise  in zip(idx, idy, inoise):
+            uncertainty[:,j,i] = noise
+
+        #for i, (xc, yc) in enumerate(zip(idx, idy)):
+        #    if i % 500 == 0:
+        #        print(i)
+        #    uncertainty[:,yc,xc] = computeNoise(s.wave, sc.w, sc.f, self.delta, x0, y0, radius, areafactor, (xc, yc))
+            #distance = np.hypot(x0 - xc, y0 - yc)   # distance in pixels
+            #idd = distance <= radius
+            #dists = distance[idd]
+            #w = sc.w[idd]
+            #f = sc.f[idd]        
+            ## Choose closest grid point for specCube
+            #flux = s.flux[:, yc, xc]
+            #eflux = s.eflux[:, yc, xc]
+            #spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, s.at)
+            #spectrum.set_filter(self.delta, radius)
+            #uncertainty[:, yc, xc] = spectrum.noise
+        
+        # Save the computed noise
+        from astropy.io import fits
+        outname = 'uncertainty.fits'
+        hdu = fits.PrimaryHDU()
+        hdu1 = fits.ImageHDU()
+        hdu1.data = uncertainty
+        hdu1.header['EXTNAME'] = 'Uncertainty'
+        hdul = fits.HDUList([hdu, hdu1])
+        hdul.writeto(outname, overwrite=True)
+        hdul.close()
 
         
 def main():
