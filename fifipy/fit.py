@@ -5,7 +5,7 @@ from dask import delayed, compute
 # from dask.distributed import LocalCluster
 # import dask.multiprocessing
 
-def fitSlope(data, telSim=False):
+def fitSlope(data, telSim=False, off=False):
     """
         Fit the slope of a series of ramps for lab data.
         In this case, data are taken with the internal calibrator.
@@ -36,7 +36,7 @@ def fitSlope(data, telSim=False):
             # Mask saturated values
             mask = ramp > saturationLimit
             # Mask first readouts and last one
-            mask[0:3] = 1
+            mask[0:2] = 1
             mask[-1] = 1
             if np.sum(~mask) > 5:  # Compute only if there are at least 5 pts
                 slope, intercept, r_value, \
@@ -44,7 +44,11 @@ def fitSlope(data, telSim=False):
                 rslopes.append(slope)
             else:
                 rslopes.append(np.nan)
-        slopes.append(rslopes[1]-rslopes[0])  # On - Off
+        if off:
+            # Case to compute sensitivities as in the pipeline (no V/s, just ADU)
+            slopes.append(rslopes[0] * dtime / (3.63/65536.))
+        else:
+            slopes.append(rslopes[1]-rslopes[0])  # On - Off
         
     return np.array(slopes)
 
@@ -119,17 +123,17 @@ def meanSlopeSky(data):
         slopes.append(slope)
     return np.array(slopes)
 
-def fitSlopeSpax(data, telSim=False):
+def fitSlopeSpax(data, telSim=False, off=False):
     """Fit the slope of the 16 spectral pixels."""
     
     slopes = []
     for i in range(25):
-        slope = fitSlope(data[:,:,i], telSim)
+        slope = fitSlope(data[:,:,i], telSim, off)
         slopes.append(slope)
         
     return np.array(slopes)
 
-def fitAllSlopes(data, telSim=False):
+def fitAllSlopes(data, telSim=False, off=False):
 
     #client = Client(threads_per_worker=4, n_workers=1)
     #client.cluster
@@ -143,7 +147,7 @@ def fitAllSlopes(data, telSim=False):
     #return spectra
         
     # Using only spaxels
-    spaxels = [delayed(fitSlopeSpax)(data[:,:,i,:], telSim) for i in range(16)]        
+    spaxels = [delayed(fitSlopeSpax)(data[:,:,i,:], telSim, off) for i in range(16)]        
     
     #spectra = compute(* spaxels)
     spectra = compute(* spaxels, scheduler='processes')
@@ -152,7 +156,7 @@ def fitAllSlopes(data, telSim=False):
     ss = [spectra[:,:,i] for i in range(ns[2])]
     return np.array(ss)
 
-def computeSpectra(files, telSim=False):
+def computeSpectra(files, telSim=False, off=False):
     from fifipy.io import readData
     
     n=len(files)
@@ -165,7 +169,7 @@ def computeSpectra(files, telSim=False):
         else:
             print ('.',end='', flush=True)
         aor, hk, gratpos, flux = readData(f)
-        spectra = fitAllSlopes(flux, telSim)
+        spectra = fitAllSlopes(flux, telSim, off)
         specs[i,:,:] = spectra[0,:,:]   
         gpos[i] = gratpos[0]
         

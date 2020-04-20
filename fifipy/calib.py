@@ -168,6 +168,15 @@ def computeAllWaves(gpos, dichroic, obsdate, detchan, order):
         dwave.append(w[1])
     return np.array(wave), np.array(dwave)
 
+def readWindowTransmission():
+    '''Read window transmission data.'''
+    import os
+    import numpy as np
+    path0, file0 = os.path.split(__file__)
+    data = np.loadtxt(path0+'/data/windowTrans.txt')    
+    wt = data[:,0]
+    t = data[:,1]
+    return wt, t
 
 def readFlats(channel, order, dichroic, obsdate, silent=False):
     ''' Read flats '''

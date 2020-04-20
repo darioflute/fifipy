@@ -504,7 +504,7 @@ def getGroups(wvzdir, flight):
         
     return groups
 
-def flightPlots(lwgroups, alt, wblue, wred, wtot, title):
+def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
     from matplotlib import rcParams
     import matplotlib.pyplot as plt
     rcParams['font.family']='STIXGeneral'
@@ -561,7 +561,8 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title):
     ax.loglog(time,wred, 'o', color='red',label='red')
     ax.loglog(time,wtot, 'o', color='black',label='red + blue',
               markerfacecolor='None', markersize=15)
-    ax.loglog(time,wmon, 'o', color='green',label='monitor')
+    if monitor:
+        ax.loglog(time,wmon, 'o', color='green',label='monitor')
     for axis in [ax.xaxis, ax.yaxis]:
         formatter = ScalarFormatter()
         formatter.set_scientific(False)
@@ -569,7 +570,10 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title):
     ax.set_xlabel('Hours')
     ax.set_ylabel('Water Vapor Zenith [$\mu m$]')
     ax.grid(which='both')
-    ax.set_ylim(0.9,100)
+    if monitor:
+        ax.set_ylim(0.9,100)
+    else:
+        ax.set_ylim(0.9, 30)
     ax.set_xlim(0.9,10)
     plt.legend(loc = 'upper right')
     fig1.suptitle(title, fontsize=20)
@@ -581,7 +585,8 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title):
     ax = axes[0]
     ax.plot(alt[idx], wblue[idx], 'o',color='blue',label='blue')
     ax.plot(alt[idx], wred[idx], 'o',color='red',label='red')
-    ax.plot(alt[idx], wmon[idx], 'o',color='green',label='monitor')
+    if monitor:
+        ax.plot(alt[idx], wmon[idx], 'o',color='green',label='monitor')
     ax.set_xlabel('Altitude')
     ax.set_ylabel('Water Vapor Zenith [$\mu m$]')
     ax.legend()
