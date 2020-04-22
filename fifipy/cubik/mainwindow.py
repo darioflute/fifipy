@@ -90,8 +90,10 @@ class GUI (QMainWindow):
             fileName= fd.selectedFiles()
             print('Reading file ', fileName[0])
             # Save the file path for future reference
-            self.pathFile, file = os.path.split(fileName[0])
+            self.pathFile, self.WXYfile = os.path.split(fileName[0])
             self.loadFiles(self.pathFile, fileName[0])
+            print('Directory ', self.pathFile)
+            print('File WXY  ', self.WXYfile)
             try:
                 self.initializeImage()
                 print('images initialized ')
@@ -197,9 +199,7 @@ class GUI (QMainWindow):
             self.SI.xy = [(x_, medf) for x_ in x]
             self.SI.updateLinesMarkers()
 
-            
-        
-        
+
     def newUncertainty(self, event):
         """ Compute and save new uncertainty for the WXY file. """
         aperture = self.CI.circle
@@ -216,9 +216,16 @@ class GUI (QMainWindow):
         x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)  
         areafactor = (s.pixscale/radius)**2/np.pi
         
+        # Copy WXY file
+        import os
+        infile = os.path.join(self.pathFile, self.WXYfile)
+        outfile = os.path.join(self.pathFile, 'WXY_cubik.fits')
+        os.popen('cp '+infile+' '+outfile)
+
+        
         from dask import delayed, compute
         from fifipy.cubik.data import computeNoise
-        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, self.delta, x0, y0, radius, areafactor, (idx[i],idy[i])) for i in range(len(idx))]
+        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, self.SI.delta, x0, y0, radius, areafactor, (idx[i],idy[i])) for i in range(len(idx))]
 
         print('Starting the computation of uncertainty for ',len(idx),' points')
         inoise = compute(* pixels, scheduler='processes')
@@ -253,6 +260,10 @@ class GUI (QMainWindow):
         hdul = fits.HDUList([hdu, hdu1])
         hdul.writeto(outname, overwrite=True)
         hdul.close()
+        print('Data saved in uncertainty.fits')
+        # Update new WXY file with computed uncertainty
+        with fits.open(outfile, mode='update') as hdl:
+            hdl['ERROR'].data = uncertainty
 
         
 def main():
