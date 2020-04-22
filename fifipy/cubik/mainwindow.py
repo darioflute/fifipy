@@ -6,7 +6,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QS
                              QAction, QFileDialog, QVBoxLayout)
 from PyQt5.QtCore import Qt
 from fifipy.cubik.data import spectralCube, spectralCloud, Spectrum
-from fifipy.cubik.graphics import ImageCanvas, SpectrumCanvas, CircleInteractor
+from fifipy.cubik.graphics import (ImageCanvas, SpectrumCanvas, 
+                                   SegmentInteractor, CircleInteractor)
 
 class GUI (QMainWindow):
     
@@ -116,7 +117,8 @@ class GUI (QMainWindow):
         """Display the image and location of cal spaxels."""
         s = self.specCube
         sc = self.specCloud
-        image = np.nanmean(s.flux, axis=0)
+        #image = np.nanmean(s.flux, axis=0)
+        image = s.flux[s.n0,:,:]
         #xy = np.array([[x_, y_] for x_, y_ in zip(sc.x, sc.y)], dtype=np.float64)
         xy = np.column_stack((sc.x, sc.y))
         #xy = np.array([sc.x, sc.y], np.float_)
@@ -136,41 +138,66 @@ class GUI (QMainWindow):
         self.CI = CircleInteractor(self.ic.axes, (x0, y0), radius)
         self.ic.draw_idle()
         self.CI.modSignal.connect(self.onModifiedAperture)
-        
+  
     def initializeSpectrum(self):
         """Display the spectrum and cloud of flux points at location in image."""
         # Communicate new spectrum to spectral window
-        s = self.specCube
-        medw = np.nanmedian(s.wave)
-        #self.delta = medw/s.R/2.355  # spectral resolution in wavelength (FWHM = 2.355 * sigma)
-        self.delta = medw/s.R # spectral resolution in wavelength (FWHM = 2.355 * sigma)
-        print('window size in wavelength ', self.delta)
         self.onModifiedAperture('initial aperture')
         
     def onModifiedAperture(self, event):
         """Reacts to change in position and size of aperture."""
-        aperture = self.CI.circle
         s = self.specCube
         sc = self.specCloud
-        xc, yc = aperture.center
-        radius = aperture.radius
-        # Select points inside 
-        x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)
-        distance = np.hypot(x0 - xc, y0 - yc)   # distance in pixels
-        idx = distance <= radius
-        dists = distance[idx]
-        w = sc.w[idx]
-        f = sc.f[idx]        
-        # Choose closest grid point for specCube
-        pdistance = np.hypot(s.points[:,0] - xc, s.points[:,1] - yc)
-        imin = np.argmin(pdistance)
-        flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
-        eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
-        self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, s.at)
-        self.sc.spectrum.set_colors()
-        self.sc.spectrum.set_filter(self.delta, radius, s.pixscale)
-        self.sc.drawSpectrum()
-        
+        radius = self.CI.circle.radius
+        if event != 'segment modified':
+            xc, yc = self.CI.circle.center
+            # Select points inside 
+            x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)
+            distance = np.hypot(x0 - xc, y0 - yc)   # distance in pixels
+            idx = distance <= radius
+            dists = distance[idx]
+            w = sc.w[idx]
+            f = sc.f[idx]        
+            # Choose closest grid point for specCube
+            pdistance = np.hypot(s.points[:,0] - xc, s.points[:,1] - yc)
+            imin = np.argmin(pdistance)
+            flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
+            eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
+            self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, s.at)
+            self.sc.spectrum.set_colors()
+        if event == 'segment modified':
+            # check if the segment has shifted
+            c = self.SI.center
+            n0 = np.argmin(np.abs(s.wave-c))
+            if n0 != s.n0:
+                s.n0 = n0
+                image = s.flux[s.n0,:,:]
+                self.ic.updateImage(image)
+                
+        if event == 'initial aperture':
+            print('Initialize length')
+            medw = np.nanmedian(self.sc.spectrum.wave)
+            print('Middle wavelength', medw)
+            self.length = medw/s.R # spectral resolution in wavelength (FWHM = 2.355 * sigma)
+            print('window size in wavelength ', self.length)
+            self.sc.spectrum.set_filter(self.length, radius, s.pixscale)
+            medf = np.nanpercentile(self.sc.spectrum.f, 10)
+            print('Height ', medf)
+            self.sc.drawSpectrum()
+            self.SI = SegmentInteractor(self.sc.ax1, (medw, medf), 
+                                        self.length, color='Blue')
+            #self.sc.draw_idle()
+            self.SI.modSignal.connect(self.onModifiedAperture)
+        else:
+            #print('delta ', self.SI.delta)
+            self.sc.spectrum.set_filter(self.SI.delta, radius, s.pixscale)
+            self.sc.drawSpectrum()
+            medf = np.nanpercentile(self.sc.spectrum.f, 10)
+            x, y = zip(*self.SI.xy)
+            self.SI.xy = [(x_, medf) for x_ in x]
+            self.SI.updateLinesMarkers()
+
+            
         
         
     def newUncertainty(self, event):

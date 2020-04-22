@@ -18,6 +18,28 @@ class spectralCube(object):
         self.flux = hdl['FlUX'].data
         self.eflux = hdl['ERROR'].data
         self.wave = hdl['wavelength'].data
+        self.n = len(self.wave)
+        # Read reference wavelength from file group name
+        try:
+            self.l0 = self.header['RESTWAV']
+            print('Rest wavelength is ', self.l0)
+        except:
+            try:
+                if self.channel == 'RED':
+                    filegp = self.header['FILEGP_R'].strip()
+                else:
+                    filegp = self.header['FILEGP_B'].strip()
+                print('file group id ', filegp)
+                names = filegp.split('_')
+                wr = names[-1]
+                print('wr is ',wr)
+                self.l0 = float(wr)
+            except:
+                self.l0 = np.nanmedian(self.wave)
+                print('No file group present, assumed central wavelength ', self.l0)
+        print('ref wav ', self.l0)
+        # Found reference pixel
+        self.n0 = np.argmin((np.abs(self.wave-self.l0)))
         self.X = hdl['X'].data
         self.Y = hdl['Y'].data
         self.R = self.header['RESOLUN']  # spectral resolution
@@ -27,10 +49,10 @@ class spectralCube(object):
         self.at = utrans[1,:]
         D = 2.5 #m
         lam = np.nanmean(self.wave)*1.e-6
-        #fwhm = 1.01 * lam / D * 180 / np.pi * 3600 #mirror with obstruction  
-        fwhm = 1.22 * lam / D * 180 / np.pi * 3600 #mirror without obstruction (close to resolution of FIFI-LS)  
+        fwhm = 1.01 * lam / D * 180 / np.pi * 3600 #mirror with obstruction  
+        #fwhm = 1.22 * lam / D * 180 / np.pi * 3600 #mirror without obstruction (close to resolution of FIFI-LS)  
         #sigma = fwhm / 2.355
-        self.radius =  fwhm * 0.5 * 1.5 # kernel 1.5x the FWHM
+        self.radius =  fwhm * 0.5 # HWHM
         self.channel = self.header['DETCHAN']        
         if self.channel == 'BLUE':
             self.order = self.header["G_ORD_B"]
@@ -42,6 +64,7 @@ class spectralCube(object):
         self.points = np.c_[np.ravel(xi), np.ravel(yi)]
         self.pixscale, ypixscale = proj_plane_pixel_scales(self.wcs) * 3600. # Pixel scale in arcsec
         print('scale is ', self.pixscale, ' arcsec')
+        
         
 class spectralCloud(object):
     """Cloud of points from CAL files."""
@@ -135,7 +158,7 @@ class Spectrum(object):
     def set_filter(self, delta, radius, pixscale):
         self.delta = delta * 0.5  # Half of the FWHM 
         areafactor = (pixscale/radius)**2/np.pi
-        print('pixscale, radius, area factor is ', pixscale, radius, areafactor)
+        #print('pixscale, radius, area factor is ', pixscale, radius, areafactor)
         flux = []
         n = []
         # Compute the number of points for spectral resolution
@@ -147,7 +170,8 @@ class Spectrum(object):
         n90 = np.percentile(n, 90, interpolation = 'midpoint') 
         deltas = []
         # I can convert this to multi-processing to speed up the output
-        # First run - flux1 is 1st approximation
+        # First run - flux1 
+        # I should filter on a third of FWHM (Shannon's criterion)
         for wm, nm in zip(self.wave, n):
             delta = self.delta * np.sqrt(n90 / nm) # Adjust interval
             deltas.append(delta)
@@ -180,7 +204,7 @@ class Spectrum(object):
                     m0 = np.nanmedian(residual)
                     m1 = np.nanmedian(np.abs(residual - m0))
                     # idx = np.abs(residual) < 4 * m1
-                    idx = (residual < 4.5 * m1) & (residual > - 4 * m1)
+                    idx = (residual < 5 * m1) & (residual > - 4.5 * m1)
                     wr.extend(wi[~idx])
                     fr.extend(fi[~idx])
                     fi = fi[idx]

@@ -25,6 +25,178 @@ from astropy import units as u
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtCore import QSize, Qt, pyqtSignal, QObject
 
+
+class SegmentInteractor(QObject):
+    
+    epsilon = 10
+    showverts = True
+    mySignal = pyqtSignal(str)
+    modSignal = pyqtSignal(str)
+
+    def __init__(self, ax, center, delta, color='#7ec0ee'):
+        super().__init__()
+        from matplotlib.lines import Line2D
+        # To avoid crashing with maximum recursion depth exceeded
+        import sys
+        sys.setrecursionlimit(10000) # 10000 is 10x the default value
+
+        self.ax = ax
+        self.canvas = ax.figure.canvas
+        self.fwhm = delta
+        self.delta = delta
+        xc, yc = center
+        self.center = xc
+        x = xc + self.delta * np.array([-0.5, 0.5])
+        xf = xc + self.fwhm * np.array([-0.5, 0.5])
+        xm = xc + self.delta * np.array([-0.5,0.,0.5])
+        y = yc * np.ones(2)
+        ym = yc * np.ones(3)
+        self.xy = [(x_, y_) for x_, y_ in zip(x,y)]
+        self.line = Line2D(x, y, color=color, linewidth=2, animated = True)
+        self.linefwhm = Line2D(xf, y, color=color, linewidth=10, alpha=0.5, animated = True)
+        self.markers = Line2D(xm, ym, marker='o', linestyle=None, linewidth=0., 
+                              markerfacecolor=color, animated=True)                
+        self.artists = [self.line, self.markers, self.linefwhm]
+        for artist in self.artists:
+            self.ax.add_line(artist)
+        self.cid = self.line.add_callback(self.si_changed)
+        self._ind = None  # the active extreme of the segment
+        self.connect()
+
+    def connect(self):
+        self.cid_draw = self.canvas.mpl_connect('draw_event', self.draw_callback)
+        self.cid_press = self.canvas.mpl_connect('button_press_event',
+                                                 self.button_press_callback)
+        self.cid_release = self.canvas.mpl_connect('button_release_event',
+                                                   self.button_release_callback)
+        self.cid_motion = self.canvas.mpl_connect('motion_notify_event', 
+                                                  self.motion_notify_callback)
+        self.canvas.draw_idle()
+
+    def disconnect(self):
+        self.canvas.mpl_disconnect(self.cid_draw)
+        self.canvas.mpl_disconnect(self.cid_press)
+        self.canvas.mpl_disconnect(self.cid_release)
+        self.canvas.mpl_disconnect(self.cid_motion)
+        try:
+            self.line.remove()
+            self.linefwhm.remove()
+            self.markers.remove()
+        except BaseException:
+            print('no line')
+        self.canvas.draw_idle()
+        self.aperture = None
+        
+    def draw_callback(self, event):
+        self.background = self.canvas.copy_from_bbox(self.ax.bbox)
+        for artist in self.artists:
+            self.ax.draw_artist(artist)
+
+    def si_changed(self, line):
+        'this method is called whenever the line object is called'
+        # only copy the artist props to the line (except visibility)
+        vis = self.markers.get_visible()
+        Artist.update_from(self.markers, line)
+        self.markers.set_visible(vis)  
+
+    def get_ind_under_point(self, event):
+        'get the index of the point if within epsilon tolerance'
+        # Distance is computed in pixels on the screen
+        x = self.markers.get_xdata()
+        y = self.markers.get_ydata()
+        xym = [(x_, y_) for x_, y_ in zip(x,y)] 
+        xy = self.ax.transData.transform(xym)
+        x, y = zip(*xy)
+        x = np.array(x); y = np.array(y)
+        d = np.hypot(x - event.x, y - event.y)
+        indseq, = np.nonzero(d == d.min())
+        if len(indseq) > 0:
+            ind = indseq[0]
+            print('ind epsilon ', d[ind], self.epsilon)
+            if d[ind] >= self.epsilon:
+                ind = None
+            print('point activated ', ind)
+        else:
+            ind = None
+        return ind
+
+    def button_press_callback(self, event):
+        'whenever a mouse button is pressed'
+        if not self.showverts:
+            return
+        if event.inaxes is None:
+            return
+        if event.button != 1:
+            return
+        self._ind = self.get_ind_under_point(event)
+
+    def button_release_callback(self, event):
+        'whenever a mouse button is released'
+        if not self.showverts:
+            return
+        if event.button != 1:
+            return
+        self._ind = None
+
+    def motion_notify_callback(self, event):
+        'on mouse movement'
+        if not self.showverts:
+            return
+        if self._ind is None:
+            return
+        if event.inaxes is None:
+            return
+        if event.button != 1:
+            return
+        # Rebuild line collection
+        x, y = zip(*self.xy)
+        x = np.asarray(x)
+        y = np.asarray(y)
+        # How avoiding overstepping ...
+        if self._ind == 0:
+            if event.xdata < self.center:
+                length = np.abs(event.xdata - self.center) * 2
+                if length > self.fwhm/3:
+                    self.delta = length
+                x[0] = self.center - self.delta * 0.5
+                x[1] = self.center + self.delta * 0.5
+        elif self._ind == 2:
+            if event.xdata > self.center:
+                length = np.abs(event.xdata - self.center) * 2
+                if length > self.fwhm/3:
+                    self.delta = length
+                x[0] = self.center - self.delta * 0.5
+                x[1] = self.center + self.delta * 0.5
+        elif self._ind == 1:
+            step = event.xdata - self.center
+            x[0] += step
+            x[1] += step
+            self.center += step
+        # Update xy, probably not needed
+        self.xy = [(i,j) for (i,j) in zip(x,y)]
+        # Update segments and markers
+        self.updateLinesMarkers()
+        # Notify callback
+        self.modSignal.emit('segment modified')
+
+    def updateLinesMarkers(self):
+        #self.line.set_data(zip(*self.xy))
+        x, y = zip(*self.xy)
+        xm = self.center + np.array([-0.5,0.,0.5]) * self.delta
+        xf = self.center + np.array([-0.5, 0.5]) * self.fwhm
+        ym = y[0] * np.ones(3)
+        self.line.set_data(x, y)
+        self.markers.set_data(xm, ym)
+        self.linefwhm.set_data(xf, y)
+
+    def redraw(self, y0):
+        self.canvas.restore_region(self.background)
+        for artist in self.artists:
+            self.ax.draw_artist(artist)
+        self.canvas.update()
+        self.canvas.flush_events()
+
+
 class CircleInteractor(QObject):
 
     epsilon = 5
@@ -41,15 +213,24 @@ class CircleInteractor(QObject):
         import sys
         sys.setrecursionlimit(10000) # 10000 is 10x the default value
 
+        self.hwhm = radius
+        self.radius = radius * 1.5
         self.ax = ax
-        self.circle = Circle(center, radius, edgecolor='Lime',
+        # Start with 1.5 x FWHM
+        self.circle = Circle(center, self.radius, edgecolor='Lime',
                              facecolor='none', fill=False, animated=True)
         self.ax.add_patch(self.circle)
+        self.fwhmcircle = Circle(center, self.hwhm, edgecolor='Lime',
+                                 facecolor='Lime', fill=True, alpha=0.2,
+                                 animated=True)
+        self.ax.add_patch(self.fwhmcircle)
+        
         self.canvas = self.circle.figure.canvas
         print('circle added')
 
         # Create a line with center, width, and height points
         self.center = self.circle.center
+        self.fwhmcenter = self.fwhmcircle.center
         self.radius = self.circle.radius
 
         x0, y0 = self.center
@@ -84,6 +265,7 @@ class CircleInteractor(QObject):
         self.canvas.mpl_disconnect(self.cid_motion)
         self.canvas.mpl_disconnect(self.cid_key)
         self.circle.remove()
+        self.fwhmcircle.remove()
         self.line.remove()
         self.canvas.draw_idle()
         self.aperture = None
@@ -91,6 +273,7 @@ class CircleInteractor(QObject):
     def draw_callback(self, event):
         self.background = self.canvas.copy_from_bbox(self.ax.bbox)
         self.ax.draw_artist(self.circle)
+        self.ax.draw_artist(self.fwhmcircle)
         self.ax.draw_artist(self.line)
 
     def circle_changed(self, circle):
@@ -194,20 +377,23 @@ class CircleInteractor(QObject):
                 dy = 0
             else:
                 yn = y0+dy
-            self.circle.center = xn,yn
+            self.circle.center = xn, yn
+            self.fwhmcircle.center = xn, yn
             # update line
             self.xy = [(i+dx,j+dy) for (i,j) in self.xy0]
             # Redefine line
             self.line.set_data(zip(*self.xy))
         # otherwise rotate and resize
         elif self.lock == 'resizerotate':
-           # Avoid to pass through the center            
+           # Avoid radius smaller than HWHM           
             if self._ind == 1:
-                r_ = r0+2*dx  if (r0+2*dx) > 0 else r0
+                r_ = r0+2*dx
             elif self._ind == 2:
-                r_ = r0+2*dy  if (r0+2*dy) > 0 else r0
+                r_ = r0+2*dy
             # update ellipse
-            self.circle.radius = r_
+            print('HWHM ', self.hwhm)
+            if r_ > 1: # not less than 1 arcsec
+                self.circle.radius = r_
             # update points
             self.updateMarkers()
 
@@ -277,6 +463,10 @@ class ImageCanvas(MplCanvas):
     def showImage(self, image, xy):
         self.image = self.axes.imshow(image, origin='lower', cmap='gist_yarg',
                                       interpolation='nearest')
+        low = np.nanpercentile(np.ravel(image),2)
+        high = np.nanpercentile(np.ravel(image),98)
+        self.image.set_clim(low,high)
+
         self.fig.colorbar(self.image, cax=self.cbaxes)  
         # Transform xy in coordinates and plot them
         #print('shape xy ', np.shape(xy))
@@ -299,8 +489,14 @@ class ImageCanvas(MplCanvas):
             yy = radec.dec.to_string(sep=':',precision=0)
             return '{:s} {:s} ({:4.0f},{:4.0f})'.format(xx,yy,x,y)
         
-        
         self.axes.format_coord = format_coord
+        self.draw_idle()
+        
+    def updateImage(self, image):
+        self.image.set_data(image)
+        low = np.nanpercentile(np.ravel(image),2)
+        high = np.nanpercentile(np.ravel(image),98)
+        self.image.set_clim(low,high)
         self.draw_idle()
 
 class SpectrumCanvas(MplCanvas):
@@ -370,7 +566,7 @@ class SpectrumCanvas(MplCanvas):
         self.ax4.set_ylabel('Atm', color='tab:blue')
         mw = np.nanmedian(s.wave)
         d  = s.delta
-        self.ax3.plot([mw-d, mw+d], np.ones(2) * nmedian, color='green')
+        #self.ax3.plot([mw-d, mw+d], np.ones(2) * nmedian, color='green')
         d = np.nanmedian(s.deltas)
         self.ax3.plot([mw-d, mw+d], np.ones(2) * nmedian * 0.5, color='orange')
         self.draw_idle()
