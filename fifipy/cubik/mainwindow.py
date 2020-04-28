@@ -165,7 +165,8 @@ class GUI (QMainWindow):
             imin = np.argmin(pdistance)
             flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
             eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
-            self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, s.at)
+            self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, 
+                                        s.at, s.radius/self.ic.pixscale)
             self.sc.spectrum.set_colors()
         if event == 'segment modified':
             # check if the segment has shifted
@@ -208,8 +209,10 @@ class GUI (QMainWindow):
         radius = aperture.radius
         nz, ny, nx = np.shape(s.eflux)
         uncertainty = np.empty((nz, ny, nx))
+        newflux = np.empty((nz, ny, nx))
         idx = np.isnan(s.eflux)
         uncertainty[idx] = np.nan
+        newflux[idx] = np.nan
         xyerror = np.nanmedian(s.eflux, axis=0)
         idy, idx = np.where(np.isfinite(xyerror))
         # Compute the uncertainty for all the spatial pixels in the list
@@ -218,51 +221,52 @@ class GUI (QMainWindow):
         
         # Copy WXY file
         import os
+        from sys import platform
         infile = os.path.join(self.pathFile, self.WXYfile)
         outfile = os.path.join(self.pathFile, 'WXY_cubik.fits')
-        os.popen('cp '+infile+' '+outfile)
-
+        outname = os.path.join(self.pathFile, 'cubik.fits')
+        if platform in ['linux', 'darwin']:
+            os.popen('cp -f '+infile+' '+outfile)
+        else:
+            os.popen('copy '+infile+' '+outfile)
         
-        from dask import delayed, compute
         from fifipy.cubik.data import computeNoise
-        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, self.SI.delta, x0, y0, radius, areafactor, (idx[i],idy[i])) for i in range(len(idx))]
-
+        from dask import delayed, compute        
+        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, self.SI.delta, x0, 
+                                        y0, radius, areafactor, (idx[i],idy[i])) 
+                  for i in range(len(idx))]
         print('Starting the computation of uncertainty for ',len(idx),' points')
-        inoise = compute(* pixels, scheduler='processes')
-        #noise = [n for n in inoise]
-        print('Storing data')        
-        for i, j, noise  in zip(idx, idy, inoise):
-            uncertainty[:,j,i] = noise
+        ifluxnoise = compute(* pixels, scheduler='processes')
 
-        #for i, (xc, yc) in enumerate(zip(idx, idy)):
-        #    if i % 500 == 0:
-        #        print(i)
-        #    uncertainty[:,yc,xc] = computeNoise(s.wave, sc.w, sc.f, self.delta, x0, y0, radius, areafactor, (xc, yc))
-            #distance = np.hypot(x0 - xc, y0 - yc)   # distance in pixels
-            #idd = distance <= radius
-            #dists = distance[idd]
-            #w = sc.w[idd]
-            #f = sc.f[idd]        
-            ## Choose closest grid point for specCube
-            #flux = s.flux[:, yc, xc]
-            #eflux = s.eflux[:, yc, xc]
-            #spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, s.at)
-            #spectrum.set_filter(self.delta, radius)
-            #uncertainty[:, yc, xc] = spectrum.noise
+        #ifluxnoise = []
+        #for i in range(len(idx)):
+        #    ifluxnoise.append(computeNoise(s.wave, sc.w, sc.f, self.SI.delta, x0, 
+        #                                y0, radius, areafactor, (idx[i],idy[i])))
+
+        print('Storing data')        
+        for i, j, fluxnoise  in zip(idx, idy, ifluxnoise):
+            newflux[:,j,i], uncertainty[:,j,i] = fluxnoise
+
+
+
+
         
         # Save the computed noise
         from astropy.io import fits
-        outname = 'uncertainty.fits'
         hdu = fits.PrimaryHDU()
         hdu1 = fits.ImageHDU()
-        hdu1.data = uncertainty
-        hdu1.header['EXTNAME'] = 'Uncertainty'
-        hdul = fits.HDUList([hdu, hdu1])
+        hdu1.data = newflux
+        hdu1.header['EXTNAME'] = 'Flux'
+        hdu2 = fits.ImageHDU()
+        hdu2.data = uncertainty
+        hdu2.header['EXTNAME'] = 'Uncertainty'
+        hdul = fits.HDUList([hdu, hdu1, hdu2])
         hdul.writeto(outname, overwrite=True)
         hdul.close()
-        print('Data saved in uncertainty.fits')
+        print('Data saved in ', outfile)
         # Update new WXY file with computed uncertainty
         with fits.open(outfile, mode='update') as hdl:
+            hdl['FLUX'].data = newflux
             hdl['ERROR'].data = uncertainty
 
         

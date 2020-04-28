@@ -541,6 +541,9 @@ class SpectrumCanvas(MplCanvas):
         idx = s.nflux > (nmedian * 0.5)
         self.ax1.scatter(s.w, s.f,  s=2, color=s.colors)
         self.ax1.scatter(s.wrejected, s.frejected, s=4, color='red')
+        self.ax1.axhline(s.baseline, color='lime')
+        self.ax1.axhline(s.baseline - 4 * s.m1, color='lime')
+        self.ax1.axhline(s.baseline + 4 * s.m1, color='lime')
         for ax in [self.ax1, self.ax2]:
             ax.fill_between(s.wave[idx], s.fflux[idx]-s.noise[idx], s.fflux[idx]+s.noise[idx], color='green', alpha=0.2)
             ax.fill_between(s.wave[idx], s.flux[idx]-s.eflux[idx], s.flux[idx]+s.eflux[idx], color='blue', alpha=0.2)

@@ -69,7 +69,7 @@ class spectralCube(object):
 class spectralCloud(object):
     """Cloud of points from CAL files."""
     
-    def __init__(self, path, pixscale, extension='CAL'):
+    def __init__(self, path, pixscale, extension='WSH'):
         calfiles = fnmatch.filter(os.listdir(path),"*"+extension+"*.fits")
         nstack = 0
         self.pixscale = pixscale
@@ -125,7 +125,7 @@ class spectralCloud(object):
         
 class Spectrum(object):
     """Spectrum at coordinate."""
-    def __init__(self, wave, flux, eflux, w, f, distance, wt, at):
+    def __init__(self, wave, flux, eflux, w, f, distance, wt, at, hwhm):
         self.wave = wave
         self.flux = flux
         self.eflux = eflux
@@ -134,31 +134,44 @@ class Spectrum(object):
         self.d = distance
         self.wt = wt
         self.at = at
+        self.hwhm = hwhm
 
     def set_colors(self):
         colors = []
-        dists = self.d
+        dists = self.d / self.hwhm
         for d in dists:
-            if d < 1.:
+            if d < .5:
                 colors.append('lime')
-            elif (d >= 1) & (d < 2):
+            elif (d >= .5) & (d < 1.0):
                 colors.append('green')
-            elif (d >=2 ) & (d < 4):
+            elif (d >= 1.0 ) & (d < 1.5):
                 colors.append('forestgreen')
-            elif (d >=4 ) & (d < 6):
+            elif (d >= 1.5 ) & (d < 2):
                 colors.append('cyan')
-            elif (d >= 6) & (d < 8):
+            elif (d >= 2) & (d < 2.5):
                 colors.append('blue')
-            elif (d >=8 ) & (d < 10):
+            elif (d >= 2.5 ) & (d < 3.0):
                 colors.append('orange')
             else:
-                colors.append('red')
+                colors.append('magenta')
         self.colors = np.array(colors)
         
     def set_filter(self, delta, radius, pixscale):
+        #from fifipy.stats import biweight
         self.delta = delta * 0.5  # Half of the FWHM 
         areafactor = (pixscale/radius)**2/np.pi
         #print('pixscale, radius, area factor is ', pixscale, radius, areafactor)
+        # O-th run - approx baseline, get rid of outliers from baseline
+        m0 = np.nanmedian(np.ravel(self.f))
+        if m0 < 0:
+            m0 = 0
+        m1 = np.nanmedian(np.abs(np.ravel(self.f) - m0))
+        idx = np.abs(self.f - m0) < 4 * m1
+        m0 = np.nanmedian(np.ravel(self.f[idx]))
+        m1 = np.nanmedian(np.abs(np.ravel(self.f[idx]) - m0))
+        self.baseline = m0
+        self.m1 = m1
+
         flux = []
         n = []
         # Compute the number of points for spectral resolution
@@ -175,14 +188,17 @@ class Spectrum(object):
         for wm, nm in zip(self.wave, n):
             delta = self.delta * np.sqrt(n90 / nm) # Adjust interval
             deltas.append(delta)
-            idx = np.abs(self.w - wm) <= delta
-            fi = self.f[idx]
-            wi = self.w[idx]
-            di = self.d[idx] / radius
-            dw = (wi - wm) / delta
-            wt = (1 - di**2)**2 * (1 - dw**2)**2 # Biweight
-            f0 = np.sum(fi*wt)/np.sum(wt)
-            flux.append(f0)
+            idx = (np.abs(self.w - wm) <= delta) & (np.abs(self.f - self.baseline) < 4 * self.m1)
+            # Compute the biweight mean
+            #biw, sbiw = biweight(self.f[idx])
+            flux.append(np.nanmedian(self.f[idx]))
+            #fi = self.f[idx]
+            #wi = self.w[idx]
+            #di = self.d[idx] / radius
+            #dw = (wi - wm) / delta
+            #wt = (1 - di**2)**2 * (1 - dw**2)**2 # Biweight
+            #f0 = np.sum(fi*wt)/np.sum(wt)
+            #flux.append(f0)
         # Rejection of outliers
         for kiter in range(10):       
             flux1 = np.array(flux)
@@ -204,7 +220,7 @@ class Spectrum(object):
                     m0 = np.nanmedian(residual)
                     m1 = np.nanmedian(np.abs(residual - m0))
                     # idx = np.abs(residual) < 4 * m1
-                    idx = (residual < 5 * m1) & (residual > - 4.5 * m1)
+                    idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & (fi - self.baseline > - 4 * self.m1)
                     wr.extend(wi[~idx])
                     fr.extend(fi[~idx])
                     fi = fi[idx]
@@ -227,7 +243,9 @@ class Spectrum(object):
                     #e0 = np.sqrt(e2/nt)
                     e0 = np.sqrt(e2 / areafactor)
                     # Should we consider the ratio circle to pixel ?
-                    
+                    #biw, sbiw = biweight(fi)
+                    #f0 = biw
+                    #e0 = sbiw / np.sqrt(areafactor * nt)
                 else:
                     f0 = 0
                     e0 = 0
@@ -243,26 +261,60 @@ class Spectrum(object):
         self.frejected = np.array(fr)
         
 def filterSpectrum(wave, w, f, d, delta, radius, areafactor):
-                
+        #from fifipy.stats import biweight
         delta = delta * 0.5  # Half of the FWHM 
         flux = []
+        # O-th run - approx baseline, get rid of outliers from baseline
+        m0 = np.nanmedian(np.ravel(f))
+        if m0 < 0:
+            m0 = 0
+        m1 = np.nanmedian(np.abs(np.ravel(f) - m0))
+        idx = np.abs(f - m0) < 3 * m1
+        m0 = np.nanmedian(np.ravel(f[idx]))
+        m1 = np.nanmedian(np.abs(np.ravel(f[idx]) - m0))
+        base0 = m0
+        base1 = m1
+
+        
+        m0 = np.nanmedian(np.ravel(f))
+        m1 = np.nanmedian(np.abs(np.ravel(f) - m0))
+        idx = (f - m0) < - 4 * m1
+        f[idx] = np.nan
+        
+        # Discard everything lower than - (k x sigma) 
         # First run - flux1 is 1st approximation
         for wm in wave:
-            idx = np.abs(w - wm) <= delta
-            fi = f[idx]
-            wi = w[idx]
-            di = d[idx] / radius
+            idx = (np.abs(w - wm) <= delta) & ((f - base0) > - 3 * base1)
+            # Compute the biweight mean
             if np.sum(idx) > 5:
-                dw = (wi - wm) / delta
-                wt = (1 - di**2)**2 * (1 - dw**2)**2 # Biweight
-                f0 = np.sum(fi*wt)/np.sum(wt)
-                #print(f0)
+                fi = f[idx]
+                biw = np.nanmedian(fi)
+                #biw, sbiw = biweight(fi)
             else:
-                f0 = np.nan
-            flux.append(f0)
+                biw = np.nan
+            flux.append(biw)
+            #fi = f[idx]
+            #wi = w[idx]
+            #di = d[idx] / radius
+            #if np.sum(idx) > 5:
+            #    dw = (wi - wm) / delta
+            #    wt = (1 - di**2)**2 * (1 - dw**2)**2 # Biweight
+            #    f0 = np.sum(fi*wt)/np.sum(wt)
+            #    #print(f0)
+            #else:
+            #    f0 = np.nan
+            #flux.append(f0)
+        # Reject excessive negative numbers
+        #flux = np.array(flux)
+        #mf = np.nanmedian(flux)
+        #ms = np.nanmedian(np.abs(flux-mf))
+        #idx = (flux - mf) < -20 * ms
+        #flux[idx] = np.nan
+        
         # Rejection of outliers
-        for kiter in range(4):       
+        for kiter in range(6):       
             flux1 = np.array(flux)
+            #print('flux min ', np.nanmin(flux1))
             flux = []
             noise = []
             for wm in wave:
@@ -277,7 +329,7 @@ def filterSpectrum(wave, w, f, d, delta, radius, areafactor):
                     m0 = np.nanmedian(residual)
                     m1 = np.nanmedian(np.abs(residual - m0))
                     # idx = np.abs(residual) < 4 * m1
-                    idx = (residual < 4.5 * m1) & (residual > - 4 * m1)
+                    idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & (fi - base0 > - 3 * base1)
                     fi = fi[idx]
                     wi = wi[idx]
                     di = di[idx]
@@ -295,17 +347,15 @@ def filterSpectrum(wave, w, f, d, delta, radius, areafactor):
                     nt = len(wt)
                     try:
                         e2 = nt / (nt-1) * np.nansum((wt * (fi - f0))**2) / w1**2                    
-                        #e2 = np.nansum((nt*wt*fi/wtsum - f0)**2)/(nt-1)
-                        #e0 = np.sqrt(e2/nt)
                         e0 = np.sqrt(e2 / areafactor)
                     except:
                         e0= np.nan
                 else:
-                    f0 = 0
+                    f0 = np.nan
                     e0 = np.nan
                 flux.append(f0)
                 noise.append(e0)
-        return np.array(noise)
+        return np.array(flux), np.array(noise)
         
 def computeNoise(wave, scw, scf, delta, x0, y0, radius, areafactor, center):
         xc, yc = center
@@ -314,5 +364,5 @@ def computeNoise(wave, scw, scf, delta, x0, y0, radius, areafactor, center):
         dists = distance[idx]
         w = scw[idx]
         f = scf[idx]        
-        noise = filterSpectrum(wave, w, f, dists, delta, radius, areafactor)
-        return noise       
+        nflux, noise = filterSpectrum(wave, w, f, dists, delta, radius, areafactor)
+        return nflux, noise       
