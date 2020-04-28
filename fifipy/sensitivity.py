@@ -326,7 +326,84 @@ def fitCombinedLabSlopes(flux, ncycles, chop=False):
         slopes2 = np.array(slopes2)
         eslopes2 = np.array(eslopes2)
         slopes = slopes2 - slopes
-        eslopes = np.sqrt((eslopes**2 + eslopes2**2)*0.5) # error on single slope
+        eslopes = np.sqrt((eslopes**2 + eslopes2**2)) # error on combined slopes
+        
+    return slopes, eslopes, exptime
+
+
+def fitCombinedLabSlopesNew(flux, ncycles, chop=False):
+    """Combining ramps before fitting slope."""
+    import numpy as np
+    from fifipy.stats import biweight
+    # Select off (flux1) and on (flux2) positions
+    mask = (np.arange(128*ncycles) // 64 % 2) == 0 
+    mask *= (np.arange(128*ncycles) // 32 % 2) == 0 
+    idx = mask == 1
+    flux1 = flux[:,idx,:,:] / (3.63/65536.)
+    if chop:
+        mask = (np.arange(128*ncycles) // 64 % 2) == 1 
+        mask *= (np.arange(128*ncycles) // 32 % 2) == 0 
+        idx = mask == 1
+        flux2 = flux[:,idx,:,:]/ (3.63/65536.)
+    # x position as function of ramp
+    x = np.arange(32*ncycles) % 32
+    xr = np.arange(32)#  * 1/(32*8) # time in seconds
+    slopes = []
+    eslopes = []
+    exptime = []
+    if chop:
+        for f1, f2 in zip(flux1, flux2):
+            ramp = []
+            eramp = []
+            for i in range(32):
+                fx1 = f1[x == i,:,:]
+                fx2 = f2[x == i,:,:]
+                nx = np.sum(x == i)
+                # Biweight mean
+                r, er = biweight(fx2[1:]-fx1[1:], axis=0) # skip first
+                ramp.append(r)
+                eramp.append(er/np.sqrt(nx-1))
+            ramp = np.array(ramp)
+            eramp = np.array(eramp)
+            slope = np.empty((16,25))
+            eslope = np.empty((16, 25))
+            for i in range(16):
+                for j in range(25):
+                    # Skip first 2 or 3 and last reading 
+                    a, ea, b, eb = fitab(xr[2:-1],ramp[2:-1,i,j], eramp[2:-1,i,j])
+                    slope[i, j] = b
+                    eslope[i, j] = eb
+            slopes.append(slope)
+            eslopes.append(eslope)
+            exptime.append(ncycles*2/8.)  # 2 ramps per cycle with 1/8s integration
+    else:
+        for f in flux1:
+            ramp = []
+            eramp = []
+            for i in range(32):
+                fx = f[x == i,:,:]
+                nx = np.sum(x == i)
+                # Biweight mean
+                r, er = biweight(fx[1:], axis=0) # skip first
+                ramp.append(r)
+                eramp.append(er/np.sqrt(nx-1))
+            ramp = np.array(ramp)
+            eramp = np.array(eramp)
+                    
+            slope = np.empty((16,25))
+            eslope = np.empty((16, 25))
+            for i in range(16):
+                for j in range(25):
+                    # Skip first 2 or 3 and last reading 
+                    a, ea, b, eb = fitab(xr[2:-1],ramp[2:-1,i,j], eramp[2:-1,i,j])
+                    slope[i, j] = b
+                    eslope[i, j] = eb
+            slopes.append(slope)
+            eslopes.append(eslope)
+            exptime.append(ncycles*2/8.)  # 2 ramps per cycle with 1/8s integration
+            slopes = np.array(slopes)
+            eslopes = np.array(eslopes)
+            exptime = np.array(exptime)
         
     return slopes, eslopes, exptime
 
@@ -795,3 +872,93 @@ def readLabData(fluxcaldir, direcs, chop=False, combine=False):
     
     return waves, dwaves, error, flux, np.mean(exptime), obsdate
 
+
+# Routines to remove the correlated noise between ramps of pixels in the same spaxel
+
+def fitramp(x, y):
+    """
+    Slope fitting for equidistant x (assuming distance = 1)
+    """
+    import numpy as np
+    # Eliminate NaN (which comes from saturated ramps)
+    S = len(y)
+    Sx = np.sum(x)
+    Sy = np.sum(y)
+    Sxy = np.sum(x*y)
+    Sxx = np.sum(x*x)
+    D = S * Sxx - Sx * Sx
+    a = (Sxx * Sy - Sx * Sxy) / D
+    b = (S * Sxy - Sx * Sy) / D
+    return a, b
+
+
+def subCorrNoise(ramp):
+    from fifipy.stats import biweight
+    import numpy as np
+    xr = np.arange(32)
+    ramp = np.float32(ramp) / 2**16 + 0.5 # normalize to 0-1
+    ramp *= 3.63 # Transform into V
+    for spaxel in range(25):
+        res = []
+        for i in range(18):
+            ri = ramp[:,i,spaxel]
+            mask = ri < 2.7
+            #ri[~mask] = np.nan
+            mask[:2] = False
+            mask[-1:] = False
+            a, b = fitramp(xr[mask], ri[mask])
+            res.append(ri - a - b * xr)
+        res = np.array(res)
+        xsignal, s = biweight(res, axis=0)
+        for i in range(18):
+            ramp[:, i, spaxel] -= xsignal
+    ramp *= 65536 / 3.63  # Back to ADU and unsigned integer
+    ramp -= 2**15
+    # Limit inside unsigned int16 integer limits
+    ramp[ramp < -32768] = -32768 
+    ramp[ramp > 32767] = 32767
+    # Old    
+        #dri = ri[1:,:] - ri[:-1,:]
+        #sri = ri.copy()
+        ## Should mask saturated values: TODO
+        #for i in range(18):
+        #    slope = np.nanmean(dri[2:-1,i]) 
+        #    # Note we have to compute mean and not median here
+        #    # Otherwise, the results is very different from a fitted slope
+        #    sri[:,i] -= slope.astype(int) * xr
+        #    itc, itcs = biweight(sri[2:-1,i])
+        #    sri[:,i] -= itc.astype(int)
+        #xsignal, s = biweight(sri, axis=1)
+        #for i in range(18):
+        #    ramp[:, i, spaxel] -= xsignal.astype(int) 
+        ## Should check for values < -32768
+        ## ramp[ramp < -32768] = -32768
+        ## Alternatively increase all the values
+        #rmin = np.nanmin(np.ravel(ramp))
+        #dmin = -32768 - rmin
+        #if dmin > 0:
+        #    ramp += dmin
+    return ramp.astype(int)
+
+def updateRamps(fitsfile):
+    from astropy.io import fits
+    from dask import delayed, compute        
+    
+    with fits.open(fitsfile, mode='update') as hdl:
+        scidata = hdl[1].data
+        data = scidata.DATA
+        header = hdl[0].header
+        detchan = header['DETCHAN']
+        if detchan == 'RED':
+            ncycles = header['C_CYC_R']
+            ngrat = header['G_PSUP_R']
+        else:
+            ncycles = header['C_CYC_B']
+            ngrat = header['G_PSUP_B']
+        ramps = data.reshape(ngrat*ncycles*4,32,18,26)
+        # MultiProcess
+        cramps = [delayed(subCorrNoise)(ramp) for ramp in ramps]
+        iramp = compute(* cramps, scheduler='processes')
+        for i, ramp  in enumerate(iramp):
+            ramps[i] = ramp                                
+        scidata.DATA = ramps.reshape(ngrat*ncycles*4*32, 18, 26)            
