@@ -104,8 +104,10 @@ def cleanAtran(wave,trans):
     # Better correction for feature at 147.4-147.65
     try:
         lines = [
+                [146,146.15],
                 [147.225, 147.375],
-                [147.66, 147.74]
+                [147.66, 147.74],
+                [147.8,147.95]
                 ]
         linefit = []
         mls = []
@@ -119,7 +121,7 @@ def cleanAtran(wave,trans):
             linefit.append(line)
             mls.append(ml)
         id0 = int(np.argmin(np.abs(wave- 146.92)))
-        trans[id0:id0+380] = trans[id0-380:id0][::-1]
+        trans[id0:id0+430] = trans[id0-430:id0][::-1]
         # Add back lines
         for line, ml in zip(linefit, mls):
             trans[ml] += line

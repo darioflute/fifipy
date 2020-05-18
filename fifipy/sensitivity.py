@@ -430,7 +430,7 @@ def readRawData(fluxcaldir, direcs, combine=False):
             idx = ramps > 2.7
             ramps[idx] = np.nan
             detchan, order, dichroic, ncycles, nodbeam, filegpid, filenum = aor
-            obsdate, pos, xy, angle, za, alti, wv = hk
+            obsdate, telpos, pos, xy, angle, za, alti, wv = hk
             if combine:
                 sl, esl, expt = fitCombinedSlopes(ramps, ncycles, nodbeam)                
             else:
@@ -775,7 +775,7 @@ def computeSensitivity(responseDir, array, order, dichroic, waves, dwaves,
     
     # Reject very low values
     if applyresponse:
-        idx = stot > 0.2
+        idx = stot > 0.01
         wtot = wtot[idx]
         stot = stot[idx]
     x= wtot
@@ -798,7 +798,7 @@ def computeSensitivity(responseDir, array, order, dichroic, waves, dwaves,
     sr  = np.empty(len(wr))
     esr = np.empty(len(wr))
     for i, w in enumerate(wr):
-        idx = (np.abs(x-w) < dwr/2.)
+        idx = (np.abs(x-w) < dwr)  # oversampling is 2
         sr[i],esr[i] = biweight(y[idx])
 
     ax.plot(wr,sr,color='lime')
@@ -848,7 +848,7 @@ def readLabData(fluxcaldir, direcs, chop=False, combine=False):
             idx = ramps > 2.7
             ramps[idx] = np.nan
             detchan, order, dichroic, ncycles, nodbeam, filegpid, filenum = aor
-            obsdate, pos, xy, angle, za, alti, wv = hk
+            obsdate, telpos, pos, xy, angle, za, alti, wv = hk
             if combine:
                 sl, esl, expt = fitCombinedLabSlopes(ramps, ncycles, chop)
             else:
@@ -874,7 +874,6 @@ def readLabData(fluxcaldir, direcs, chop=False, combine=False):
 
 
 # Routines to remove the correlated noise between ramps of pixels in the same spaxel
-
 def fitramp(x, y):
     """
     Slope fitting for equidistant x (assuming distance = 1)
@@ -903,13 +902,15 @@ def subCorrNoise(ramp):
         for i in range(18):
             ri = ramp[:,i,spaxel]
             mask = ri < 2.7
-            #ri[~mask] = np.nan
             mask[:2] = False
             mask[-1:] = False
             a, b = fitramp(xr[mask], ri[mask])
             res.append(ri - a - b * xr)
         res = np.array(res)
         xsignal, s = biweight(res, axis=0)
+        # Get rid of any linear trend or bias
+        a, b = fitramp(xr[mask], xsignal[mask])
+        xsignal -= a + b * xr        
         for i in range(18):
             ramp[:, i, spaxel] -= xsignal
     ramp *= 65536 / 3.63  # Back to ADU and unsigned integer
@@ -917,27 +918,6 @@ def subCorrNoise(ramp):
     # Limit inside unsigned int16 integer limits
     ramp[ramp < -32768] = -32768 
     ramp[ramp > 32767] = 32767
-    # Old    
-        #dri = ri[1:,:] - ri[:-1,:]
-        #sri = ri.copy()
-        ## Should mask saturated values: TODO
-        #for i in range(18):
-        #    slope = np.nanmean(dri[2:-1,i]) 
-        #    # Note we have to compute mean and not median here
-        #    # Otherwise, the results is very different from a fitted slope
-        #    sri[:,i] -= slope.astype(int) * xr
-        #    itc, itcs = biweight(sri[2:-1,i])
-        #    sri[:,i] -= itc.astype(int)
-        #xsignal, s = biweight(sri, axis=1)
-        #for i in range(18):
-        #    ramp[:, i, spaxel] -= xsignal.astype(int) 
-        ## Should check for values < -32768
-        ## ramp[ramp < -32768] = -32768
-        ## Alternatively increase all the values
-        #rmin = np.nanmin(np.ravel(ramp))
-        #dmin = -32768 - rmin
-        #if dmin > 0:
-        #    ramp += dmin
     return ramp.astype(int)
 
 def updateRamps(fitsfile):
@@ -962,3 +942,36 @@ def updateRamps(fitsfile):
         for i, ramp  in enumerate(iramp):
             ramps[i] = ramp                                
         scidata.DATA = ramps.reshape(ngrat*ncycles*4*32, 18, 26)            
+
+def subReadoutNoise(fitsfile):
+    """
+    The code subtracts from all pixels the 0-th pixel which
+    contains readout noise common to all the pixels.
+    Its removal improves the quality of the data reduction.
+    
+    Parameters
+    ----------
+    fitsfile : input raw file for FIFI-LS
+
+    Returns
+    -------
+    None.
+
+    """
+    from astropy.io import fits
+    import numpy as np
+    
+    with fits.open(fitsfile, mode='update') as hdl:
+        scidata = hdl[1].data
+        data = scidata.DATA
+        header = hdl[0].header
+        header['HISTORY'] = 'Subtracted open pixel from ramps'
+        fdata = np.float32(data)
+        openpix = fdata[:,0,:25] + 2**15  
+        restpix = fdata[:,1:,:25] + 5000
+        openpix=np.tile(np.expand_dims(openpix,1),(1,17,1))
+        restpix -= openpix
+        restpix[restpix<-32768] = -32768
+        restpix[restpix>32767] = 32767
+        fdata[:,1:,:25] = restpix
+        scidata.DATA = np.int16(fdata)

@@ -73,7 +73,7 @@ def readAllData(fitsfile):
             return aor, hk, gratpos, flux
 
 
-def readData(fitsfile):
+def readData(fitsfile, subtractZero=True):
     """Data reader for Level 1 raw FIFI-LS files."""
 
     hdulist = fits.open(fitsfile)
@@ -89,6 +89,8 @@ def readData(fitsfile):
     else:
         detchan = header['DETCHAN']
         obsdate = header['DATE-OBS']
+        telra = header['TELRA']
+        teldec = header['TELDEC']
         dichroic = header['DICHROIC']
         if detchan == 'RED':
             #wvc = header['G_WAVE_R']
@@ -128,6 +130,11 @@ def readData(fitsfile):
         filenum = int(filename[:5])            
         data = np.float32(data)+2**15  # signed integer to float
         data *= 3.63/65536.            # ADU to V
+        if subtractZero:
+            openpix = data[:,0,:25]
+            for i in range(1,18):
+                data[:,i,:25] -= openpix
+        
         nramps = np.size(data[:,0,0])
         if nramps < (ncycles*4*ngrat*32):
             print ("WARNING: Number of ramps does not agree with header for ",
@@ -140,7 +147,7 @@ def readData(fitsfile):
             gratpos = start+step*np.arange(ngrat)
             aor = (detchan, order, dichroic, ncycles, 
                    nodbeam, filegpid, filenum)
-            hk  = (obsdate, (ra,dec), (dx,dy), angle, (za_sta,za_end), 
+            hk  = (obsdate, (telra, teldec), (ra,dec), (dx,dy), angle, (za_sta,za_end), 
                    (alti_sta,alti_end), (wv_sta,wv_end))
             return aor, hk, gratpos, flux
         

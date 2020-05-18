@@ -26,7 +26,7 @@ def computeFluxes(group):
         spectra = multiSlopes(voltage, sky=True)
         # Get wavelengths
         detchan, order, dichroic, ncycles, nodbeam, filegpid, filenum = aor
-        obsdate, coords, offset, angle, za, altitude, wv = hk
+        obsdate, telcoords, coords, offset, angle, za, altitude, wv = hk
         wave = []
         dw  = []
         for gp in gratpos:
@@ -76,7 +76,7 @@ def fitSlopesFile(file):
         # Compute intermediate slopes up to a difference of 16 readouts (halp ramp)
         # The first ramp is not considered
         dv0=[]
-        for i in range(3,16):
+        for i in range(0,16-first):
             vv = (v0[first+i:last,1:,:]-v0[first:last-i,1:,:])/i
             dv0.append(vv)
         dv0 = np.concatenate(dv0)
@@ -88,7 +88,7 @@ def fitSlopesFile(file):
     return spectra, gratpos
 
 
-def computeMeanFlux(group, multi=True):
+def computeMeanFlux(group, multi=True, subtractzero=True):
     from fifipy.io import readData
     #from fifipy.stats import biweightLocation
     from fifipy.calib import mwaveCal, applyFlats
@@ -117,10 +117,18 @@ def computeMeanFlux(group, multi=True):
     gpos = np.concatenate(gpos)
     spectra = np.array(spectra)
 
-    aor, hk, gratpos, voltage = readData(group[0])
+    aor, hk, gratpos, voltage = readData(group[0],subtractzero)
     detchan, order, dichroic, ncycles, nodbeam, filegpid, filenum = aor
-    obsdate, coords, offset, angle, za, altitude, wv = hk
+    obsdate, telcoords, coords, offset, angle, za, altitude, wv = hk
     wave,dw = mwaveCal(gratpos=gpos, order=order, array=detchan,dichroic=dichroic,obsdate=obsdate)
+    telra, teldec = telcoords
+    #if addbaryshift:
+    #    zb = baryshift(obsdate, telra, teldec)
+    #    print('Baryshift ', zb)
+    #    if zb < 0:
+    #        zb = 0
+    #    wave /= (1+zb)
+        
 
     ng = len(gpos)
     spectra = spectra.reshape(ng, 16, 25)
@@ -133,14 +141,129 @@ def computeMeanFlux(group, multi=True):
     flux = applyFlats(wave, flux, detchan, order, dichroic, obsdate) 
     return wave, flux, detchan, order, za[0], altitude[0]
 
-def computeAtran(waves, fluxes, detchan, order, za, altitude, 
-                 atrandata=None, computeAlpha=True, plot=True):
-    import matplotlib.pyplot as plt
-    from fifipy.calib import readAtran
-    import statsmodels.api as sm
+def alphabeta(x,y):
+    """Slope fitting."""
+    import numpy as np
+    idx = np.isfinite(y)
+    if np.sum(idx) > 10:
+        x = x[idx]
+        y = y[idx]
+        S = len(x)
+        Sx = np.sum(x)
+        Sy = np.sum(y)
+        Sxx = np.sum(x*x)
+        Sxy = np.sum(x*y)
+        Delta = S * Sxx - Sx * Sx
+        a = (Sxx * Sy - Sx * Sxy) / Delta
+        b = (S * Sxy - Sx * Sy) / Delta
+    else:
+        a = 1
+        b = 0
+    return a, b
+
+def reflat(waves, fluxes, good, computeAlpha=True):
     import numpy as np
     from scipy.interpolate import interp1d
-    from scipy.signal import medfilt
+    from scipy.signal import medfilt    
+    import statsmodels.api as sm
+    
+    wtot = np.ravel(waves[:,good,:])
+    ftot = np.ravel(fluxes[:,good,:])
+    idx = np.isfinite(ftot)
+    wtot = wtot[idx]
+    ftot = ftot[idx]
+    idx = np.argsort(wtot)
+    wtot = wtot[idx]
+    ftot = ftot[idx]
+    fm = medfilt(ftot, 31)
+    di = ftot - fm
+    medi = np.nanmedian(di)
+    madi = np.nanmedian(np.abs(di - medi))
+    idx = np.abs(di) < 5 * madi
+    wtot = wtot[idx]
+    ftot = ftot[idx]
+
+    if computeAlpha:   
+        lspec = sm.nonparametric.lowess(ftot,wtot, frac=0.03)
+        wlow = lspec[:,0]
+        flow = lspec[:,1]
+        f_ = interp1d(wlow, flow, fill_value='extrapolate')
+        alpha = np.empty(25) 
+        beta = np.empty(25)
+        for i in good:
+            wi = np.ravel(waves[:,i,:])
+            fi = np.ravel(fluxes[:,i,:])
+            # Exclude outliers
+            idx = np.isfinite(fi)
+            wi = wi[idx]
+            fi = fi[idx]
+            li = sm.nonparametric.lowess(fi, wi, frac=0.03)
+            di = fi - li[:,1]
+            medi = np.median(di)
+            madi = np.median(np.abs(di - medi))
+            idx = np.abs(di - medi) < 5 * madi
+            wi = wi[idx]
+            fi = fi[idx]
+            alpha[i], beta[i] = alphabeta(wi, f_(wi)/fi)
+            #alpha[i] = np.nansum(fi*f_(wi))/np.nansum(fi*fi)
+    
+        # Recompute
+        for i in good:
+            #print(i, alpha[i], beta[i])
+            fluxes[:,i,:] *= alpha[i] + beta[i] * waves[:,i,:]
+        wtot = np.ravel(waves[:,good,:])
+        ftot = np.ravel(fluxes[:,good,:])
+        idx = np.isfinite(ftot)
+        wtot = wtot[idx]
+        ftot = ftot[idx]
+        # Get rid of outliers
+        fm = medfilt(ftot, 31)
+        di = ftot - fm
+        medi = np.nanmedian(ftot - fm)
+        madi = np.nanmedian(np.abs(ftot - medi))
+        idx = np.abs(di) < 5 * madi
+        wtot = wtot[idx]
+        ftot = ftot[idx]
+        
+    idx = np.argsort(wtot)
+    wtot = wtot[idx]
+    ftot = ftot[idx]
+    return wtot, ftot
+    
+def computeXcorr(wtot, ftot, wt, at):
+    """Compute cross-correlation between ATRAN template and spectrum."""
+    import numpy as np
+    import statsmodels.api as sm
+
+    lspec = sm.nonparametric.lowess(ftot,wtot, frac=0.03)
+    wsky = lspec[:,0]
+    fsky = lspec[:,1]
+    wmin = np.min(wsky)
+    wmax = np.max(wsky)
+    
+    # grid
+    corr = []
+    zs = np.arange(-51,51)*1e-5
+    for z in zs:
+        fi = np.interp(wt, wsky/(1+z), fsky)
+        fi[wt < wmin] = 0
+        fi[wt > wmax] = 0
+        n = np.sum(fi > 0)
+        corr.append(np.sum(fi*at))
+        
+    i = np.argmax(corr)
+    zmin = zs[i]
+    
+    speedoflight = 300000.
+    print('cz ', speedoflight * zmin)
+    return zmin    
+    
+
+def computeAtran(waves, fluxes, detchan, order, za, altitude, 
+                 atrandata=None, computeAlpha=True, plot=True, xcorr=True):
+    import matplotlib.pyplot as plt
+    from fifipy.calib import readAtran
+    import numpy as np
     #import time
     #from astropy import units as u
     #from astropy.modeling.blackbody import blackbody_nu
@@ -159,49 +282,15 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
     #        else:
     #            fbb_nu = fbb_nu.value*angle*Jy*2.e11
     #        fluxes[:,j,i] -= fbb_nu
-    
-    # good = [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
-    
+
     if detchan == 'RED':  
         good = [1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
         #good = [0,6,7,8,10,11,13,14,15,16,19,23]
     else:
-        good = [1,2,6,7,8,11,12,13,16,17,20,21,22]
-    wtot = np.ravel(waves[:,good,:])
-    ftot = np.ravel(fluxes[:,good,:])
-    idx = (ftot > 0.01e-8)
-    wtot = wtot[idx]
-    ftot = ftot[idx]
-    lspec = sm.nonparametric.lowess(ftot,wtot, frac=0.03)
-    wlow = lspec[:,0]
-    flow = lspec[:,1]
-    f_ = interp1d(wlow, flow, fill_value='extrapolate')
-    
+        #good = [1,2,6,7,8,11,12,13,16,17,20,21,22]
+        good = [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
     # compute better spatial flats
-    alpha = np.ones(25)    
-    if computeAlpha:
-        for i in range(25):
-            wi = np.ravel(waves[:,i,:])
-            #f_ = np.interp(wi, wlow, flow)
-            fi = np.ravel(fluxes[:,i,:])
-            #alpha[i] = np.nansum(fi*f_)/np.nansum(fi*fi)
-            alpha[i] = np.nansum(fi*f_(wi))/np.nansum(fi*fi)
-        
-        # Recompute
-        for i in range(25):
-            fluxes[:,i,:] *= alpha[i]
-        wtot = np.ravel(waves[:,good,:])
-        ftot = np.ravel(fluxes[:,good,:])
-        idx = np.argsort(wtot)
-        wtot = wtot[idx]
-        ftot = ftot[idx]
-        df = ftot - medfilt(ftot, 31)
-        idx = (df > -0.1e-8)
-        wtot = wtot[idx]
-        ftot = ftot[idx]
-        #lspec = sm.nonparametric.lowess(ftot,wtot, frac=0.03)
-        #wlow = lspec[:,0]
-        #flow = lspec[:,1]
+    wtot, ftot = reflat(waves, fluxes, good, computeAlpha=computeAlpha)
     
     if atrandata is None:
         atrandata = readAtran(detchan, order)
@@ -211,18 +300,12 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
     imin = np.argmin(np.abs(altitudes-altitude))
     at = atran[imin]
     angle = za * np.pi/180.
-    #depth = 1. / cos_angle  # Flat Earth approximation
-    # Another way
-    #cos_angle = np.cos(angle)    
-    #r = 6383.5/50.  # assuming r_earth = 6371 km, altitude = 12.5 km, and 50 km of more stratosphere
-    #rcos = r * cos_angle
-    #depth = -rcos + np.sqrt(rcos * rcos + 1 + 2 * r) # Taking into account curvature of Earth
-    
     a = 6371 + 12.5  # Earth radius + altitude (~12.5 km)
-    b = a + 50.      # a + rest of atmosphere (~ 50 km)
+    c = 100           # Rest of stratosphere (~ 38 km)
+    b = a + c      
     alpha = np.arcsin(a/b * np.sin(angle)) # From law of sinus
     dx = np.sqrt(a*a + b*b - 2*a*b*np.cos(angle-alpha)) # From law of cosinus
-    depth = dx / 50.
+    depth = dx / c
     
     
     if detchan == 'BLUE':
@@ -273,12 +356,18 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             wvmin = -0.5 * np.linalg.det(b)/np.linalg.det(a)
         except:
             pass
+            
+        t = at[imin]**depth
+        tmax = np.nanmean(t[idmin])
+        tmin = np.nanmean(t[idmax])
+        t = (t-tmin)/(tmax-tmin) # Normalize
+        
+        # We can cross-correlate here
+        if xcorr:
+            zcorr = computeXcorr(wtot, ftotabs, wt, t)
+            waves /= 1 + zcorr
 
         if plot:
-            t = at[imin]**depth
-            tmax = np.nanmean(t[idmin])
-            tmin = np.nanmean(t[idmax])
-            t = (t-tmin)/(tmax-tmin) # Normalize
             fig,axes = plt.subplots(1, 3, figsize=(16,5), sharey=True,
                                     gridspec_kw = {'width_ratios': [2,3,3]})
             ax=axes[0]
@@ -315,9 +404,9 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         #w1 = 0.5 * (lc1[0] + lc1[1])
         #w2 = 0.5 * (lc2[0] + lc2[1])
         #ftot -= np.interp(wtot, np.array([w1,w2]), np.array([f1,f2]))
-        #lc = [148.1,148.3]
-        lc = [149.3, 149.6]
-        lm = [146.8,147]
+        lc = [148.0,148.3]
+        #lc = [149.3, 149.6]
+        lm = [146.85,147]
         idmin = (wtot > lc[0]) & (wtot < lc[1])
         idmax = (wtot > lm[0]) & (wtot < lm[1])
         fmin = np.nanmean(ftot[idmin])
@@ -352,11 +441,18 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         except:
             pass
 
+        t = at[imin]**depth
+        tmax = np.nanmean(t[idmin])
+        tmin = np.nanmean(t[idmax])
+        t = (t-tmin)/(tmax-tmin) # Normalize
+        # We can cross-correlate here
+        if xcorr:
+            zcorr = computeXcorr(wtot, ftotabs, wt, t)
+            waves /= 1 + zcorr
+
         if plot:
-            t = at[imin]**depth
-            tmax = np.nanmean(t[idmin])
-            tmin = np.nanmean(t[idmax])
-            t = (t-tmin)/(tmax-tmin) # Normalize
+            
+            
             fig,axes = plt.subplots(1,2,figsize=(16,5),sharey=True, 
                                     gridspec_kw = {'width_ratios': [2,6]})
             ax=axes[0]
@@ -388,10 +484,12 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     atb = atranb[imin]
         
     angle = za * np.pi/180.
-    cos_angle = np.cos(angle)
-    r = 6383.5/50.  # assuming r_earth = 6371 km, altitude = 12.5 km, and 50 km of more stratosphere
-    rcos = r * cos_angle
-    depth = -rcos + np.sqrt(rcos * rcos + 1 + 2 * r) # Taking into account curvature of Earth
+    a = 6371 + 12.5  # Earth radius + altitude (~12.5 km)
+    c = 100          # Rest of stratosphere (~ 38 km)
+    b = a + c      
+    alpha = np.arcsin(a/b * np.sin(angle)) # From law of sinus
+    dx = np.sqrt(a*a + b*b - 2*a*b*np.cos(angle-alpha)) # From law of cosinus
+    depth = dx / c    
     
     # Blue
     lc = [61.55,61.70]
@@ -399,8 +497,10 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     idbmin = (wtb > lc[0]) & (wtb < lc[1])
     idbmax = (wtb > lm[0]) & (wtb < lm[1])
     
-    lc = [149.3, 149.6]
-    lm = [146.8,147.0]
+    #lc = [149.3, 149.6]
+    #lm = [146.8,147.0]
+    lc = [148.0,148.3]
+    lm = [146.85,147]
     idrmin = (wtr > lc[0]) & (wtr < lc[1])
     idrmax = (wtr > lm[0]) & (wtr < lm[1])
     
@@ -533,9 +633,14 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
     temp = np.array(temp)
     date = np.array(date)
     wmon = np.array(wmon)
-    time = np.array(time)    
+    time = np.array(time)  
     
-    time = time - np.nanmin(time) + 1.0
+    try:
+        mintime = np.nanmin(time)
+    except:
+        mintime = 0
+    
+    time = time - mintime + 1.0
     fig1,axes = plt.subplots(3,1,figsize=(14,12),sharex=True, gridspec_kw = {'height_ratios': [1,1,2]})
     ax = axes[0]
     #ax.axis([1,11,37500,44500])
@@ -598,3 +703,51 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
     plt.show()
     
     return date, time, temp, wmon, fig1
+
+def baryshift(obsdate, ra, dec, equinox='J2000'):
+    """
+    Compute the redshift due to sun and earth movements
+    Parameters
+    ----------
+    obsdate : observational date
+    ra : right ascension of line of sight (direction of telescope)
+    dec : declination of line of sight (direction of telescope)
+    equinox : Equinox. The default is 2000.0.
+
+    Returns
+    -------
+    redshift due to sun/earth movement along the line of sight
+    """
+
+    import astropy.constants as const
+    from astropy.coordinates import (UnitSphericalRepresentation, FK5, 
+                                     solar_system, CartesianRepresentation)
+    from astropy.io import fits
+    from astropy.time import Time
+    import astropy.units as u
+
+    # Convert to Julian date
+    try:
+        time = Time(obsdate)
+    except:
+        print('Invalidate observational date')
+        return
+    
+    sc = FK5(ra * u.hourangle, dec * u.deg, equinox=equinox)
+    sc_cartesian = sc.represent_as(UnitSphericalRepresentation).\
+            represent_as(CartesianRepresentation)
+    _, ev = solar_system.get_body_barycentric_posvel('earth', time)
+    helio_vel = sc_cartesian.dot(ev).to(u.km / u.s)
+    # Compute solar velocity wrt LSR
+    sunpos = FK5(18 * u.hourangle, 30 * u.deg, equinox='J1900')
+    # Precess to current equinox
+    sunpos = sunpos.transform_to(FK5(equinox=equinox))
+    sun_v0 = 20 * u.km / u.s
+    sun_cartesian = sunpos.represent_as(UnitSphericalRepresentation).\
+        represent_as(CartesianRepresentation)
+    sun_vel = sc_cartesian.dot(sun_cartesian) * sun_v0
+    vlsr = helio_vel + sun_vel
+    speed_of_light = const.c.to(vlsr.unit)
+    result = vlsr / speed_of_light
+   
+    return result.value
