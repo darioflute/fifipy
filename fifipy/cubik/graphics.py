@@ -43,7 +43,7 @@ class SegmentInteractor(QObject):
         self.ax = ax
         self.canvas = ax.figure.canvas
         self.fwhm = delta
-        self.delta = delta
+        self.delta = delta * 0.5
         xc, yc = center
         self.center = xc
         x = xc + self.delta * np.array([-0.5, 0.5])
@@ -391,7 +391,7 @@ class CircleInteractor(QObject):
             elif self._ind == 2:
                 r_ = r0+2*dy
             # update ellipse
-            print('HWHM ', self.hwhm)
+            #print('HWHM ', self.hwhm)
             if r_ > 1: # not less than 1 arcsec
                 self.circle.radius = r_
             # update points
@@ -544,13 +544,20 @@ class SpectrumCanvas(MplCanvas):
         self.ax1.axhline(s.baseline, color='lime')
         self.ax1.axhline(s.baseline - 4 * s.m1, color='lime')
         self.ax1.axhline(s.baseline + 4 * s.m1, color='lime')
+        self.ax1.set_ylim(s.baseline - 15 * s.m1, s.baseline + 15 * s.m1)
         for ax in [self.ax1, self.ax2]:
             ax.fill_between(s.wave[idx], s.fflux[idx]-s.noise[idx], s.fflux[idx]+s.noise[idx], color='green', alpha=0.2)
             ax.fill_between(s.wave[idx], s.flux[idx]-s.eflux[idx], s.flux[idx]+s.eflux[idx], color='blue', alpha=0.2)
             ax.plot(s.wave[idx], s.flux[idx], color='blue', label='Pipeline Cube')
             ax.plot(s.wave[idx], s.fflux[idx], color='green', label='Biweight filter')  
             ax.plot(s.wave[~idx], s.flux[~idx], color='blue', alpha=0.3)
-            ax.plot(s.wave[~idx], s.fflux[~idx], color='green', alpha=0.3)  
+            ax.plot(s.wave[~idx], s.fflux[~idx], color='green', alpha=0.3)
+        outliers = len(s.frejected)
+        mednoise =  np.nanmedian(s.noise[idx])
+        self.ax1.text(0.05, 0.1, '$<\sigma>$: {:6.3f}'.format(mednoise), horizontalalignment='left', 
+                      verticalalignment='center', transform=self.ax1.transAxes)
+        self.ax1.text(0.05, 0.2, 'outliers: '+str(outliers), horizontalalignment='left', 
+                      verticalalignment='center', transform=self.ax1.transAxes)
         self.ax2.legend()
         ff = np.concatenate((s.flux[idx], s.fflux[idx]))
         if len(ff) > 10:

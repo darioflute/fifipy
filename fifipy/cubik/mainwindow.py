@@ -166,7 +166,7 @@ class GUI (QMainWindow):
             flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
             eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
             self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, 
-                                        s.at, s.radius/self.ic.pixscale)
+                                        s.at, s.radius / self.ic.pixscale)
             self.sc.spectrum.set_colors()
         if event == 'segment modified':
             # check if the segment has shifted
@@ -187,7 +187,7 @@ class GUI (QMainWindow):
             medf = np.nanpercentile(self.sc.spectrum.f, 10)
             print('Height ', medf)
             self.sc.drawSpectrum()
-            self.SI = SegmentInteractor(self.sc.ax1, (medw, medf), 
+            self.SI = SegmentInteractor(self.sc.ax1, (medw, self.sc.spectrum.baseline-self.sc.spectrum.m1*5), 
                                         self.length, color='Blue')
             #self.sc.draw_idle()
             self.SI.modSignal.connect(self.onModifiedAperture)
@@ -195,9 +195,10 @@ class GUI (QMainWindow):
             #print('delta ', self.SI.delta)
             self.sc.spectrum.set_filter(self.SI.delta, radius, s.pixscale)
             self.sc.drawSpectrum()
-            medf = np.nanpercentile(self.sc.spectrum.f, 10)
+            #medf = np.nanpercentile(self.sc.spectrum.f, 10)
             x, y = zip(*self.SI.xy)
-            self.SI.xy = [(x_, medf) for x_ in x]
+            siy = self.sc.spectrum.baseline-self.sc.spectrum.m1*5
+            self.SI.xy = [(x_, siy) for x_ in x]
             self.SI.updateLinesMarkers()
 
 

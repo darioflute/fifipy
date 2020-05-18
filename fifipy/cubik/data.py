@@ -66,7 +66,7 @@ class spectralCube(object):
         print('scale is ', self.pixscale, ' arcsec')
         
         
-class spectralCloud(object):
+class spectralCloudOld(object):
     """Cloud of points from CAL files."""
     
     def __init__(self, path, pixscale, extension='WSH'):
@@ -80,8 +80,8 @@ class spectralCloud(object):
             hlf.close()
             #dx = header['dlam_map']
             #dy = header['dbet_map']
-            obslam = header['obslam']
-            obsbet = header['obsbet']
+            obslam = header['OBSLAM']
+            obsbet = header['OBSBET']
             channel = header['DETCHAN']
             #dx = header['dlam_map']
             #dy = header['dbet_map']
@@ -104,6 +104,7 @@ class spectralCloud(object):
             fs = data.DATA / self.pixfactor   # Normalize for resampling
             ws = data.LAMBDA
             ns,nz,ny,nx = np.shape(ws)
+            print(ns,nz,ny,nx)
             for i in range(ns):
                 if nstack == 0:
                     x = xs[i]
@@ -122,7 +123,79 @@ class spectralCloud(object):
         self.x = x[idx]
         self.w = w[idx]
         self.f = f[idx]        
+  
+class spectralCloud(object):
+    """Cloud of points from CAL files."""
+    
+    def __init__(self, path, pixscale, extension='WSH'):
+        calfiles = fnmatch.filter(os.listdir(path),"*"+extension+"*.fits")
+        nstack = 0
+        self.pixscale = pixscale
+        for calfile in sorted(calfiles):
+            with fits.open(os.path.join(path, calfile)) as hlf:
+            #hlf = fits.open(os.path.join(path, calfile))
+                header = hlf['PRIMARY'].header
+                obslam = header['OBSLAM']
+                obsbet = header['OBSBET']
+                channel = header['DETCHAN']
+                ys = hlf['YS'].data / 3600. + obsbet
+                xs = -hlf['XS'].data / 3600. / np.cos( ys * np.pi / 180.) + obslam
+                platscale = header['PLATSCAL']
+                print('channel ', channel)
+                if channel == 'RED':
+                    #pixfactor = (12.2*12.5)/pixscale**2 # size of pixels from Colditz et al. 2018
+                    self.pixfactor = (platscale*3/pixscale)**2
+                else:
+                    #pixfactor = (6.14*6.25)/pixscale**2
+                    self.pixfactor = (platscale*1.5/pixscale)**2
+                #fs = data.UNCORRECTED_DATA / pixfactor   # Normalize for resampling
+                fs = hlf['FLUX'].data / self.pixfactor   # Normalize for resampling
+                ws = hlf['LAMBDA'].data
+                
+            shape = np.shape(xs)    
+            if len(shape) == 2:
+                nz, nxy = shape
+                xs = xs.reshape(1, nz, 5, 5)
+                ys = ys.reshape(1, nz, 5, 5)
+                ws = ws.reshape(1, nz, 5, 5)
+                fs = fs.reshape(1, nz, 5, 5)
+                
+            if nstack == 0:
+                x = xs
+                y = ys
+                f = fs
+                w = ws
+                nstack += 1
+            else:
+                x = np.vstack((x, xs))
+                y = np.vstack((y, ys))
+                f = np.vstack((f, fs))
+                w = np.vstack((w, ws))
+                nstack += 1
+                
+            print(np.shape(x))
+            #ns,nz,ny,nx = np.shape(ws)
+            #print(ns,nz,ny,nx)
+            #for i in range(ns):
+            #    if nstack == 0:
+            #        x = xs[i]
+            #        y = ys[i]
+            #        f = fs[i]
+            #        w = ws[i]
+            #    else:
+            #        x = np.vstack((x, xs[i]))
+            #        y = np.vstack((y, ys[i]))
+            #        f = np.vstack((f, fs[i]))
+            #        w = np.vstack((w, ws[i]))
+            #    nstack += 1
+        #print('stack of ', nstack,' frames')
+        idx = np.isfinite(f)
+        self.y = y[idx]
+        self.x = x[idx]
+        self.w = w[idx]
+        self.f = f[idx]        
         
+    
 class Spectrum(object):
     """Spectrum at coordinate."""
     def __init__(self, wave, flux, eflux, w, f, distance, wt, at, hwhm):
@@ -141,19 +214,20 @@ class Spectrum(object):
         dists = self.d / self.hwhm
         for d in dists:
             if d < .5:
-                colors.append('lime')
+                color = 'lime'
             elif (d >= .5) & (d < 1.0):
-                colors.append('green')
+                color = 'yellow'
             elif (d >= 1.0 ) & (d < 1.5):
-                colors.append('forestgreen')
+                color = 'green'
             elif (d >= 1.5 ) & (d < 2):
-                colors.append('cyan')
+                color = 'cyan'
             elif (d >= 2) & (d < 2.5):
-                colors.append('blue')
+                color = 'blue'
             elif (d >= 2.5 ) & (d < 3.0):
-                colors.append('orange')
+                color ='orange'
             else:
-                colors.append('magenta')
+                color = 'magenta'
+            colors.append(color)
         self.colors = np.array(colors)
         
     def set_filter(self, delta, radius, pixscale):
@@ -171,7 +245,9 @@ class Spectrum(object):
         m1 = np.nanmedian(np.abs(np.ravel(self.f[idx]) - m0))
         self.baseline = m0
         self.m1 = m1
-
+        
+        #trans = np.interp(self.w, self.wt, self.at)
+        
         flux = []
         n = []
         # Compute the number of points for spectral resolution
@@ -188,7 +264,7 @@ class Spectrum(object):
         for wm, nm in zip(self.wave, n):
             delta = self.delta * np.sqrt(n90 / nm) # Adjust interval
             deltas.append(delta)
-            idx = (np.abs(self.w - wm) <= delta) & (np.abs(self.f - self.baseline) < 4 * self.m1)
+            idx = (np.abs(self.w - wm) <= delta) & (np.abs(self.f - self.baseline) < 5 * self.m1)
             # Compute the biweight mean
             #biw, sbiw = biweight(self.f[idx])
             flux.append(np.nanmedian(self.f[idx]))
@@ -212,6 +288,7 @@ class Spectrum(object):
                 nn.append(np.sum(idx))
                 fi = self.f[idx]
                 wi = self.w[idx]
+                #ti = trans[idx]
                 di = self.d[idx] / radius
                 dw = (wi - wm) / delta
                 idf = np.isfinite(flux1)
@@ -219,14 +296,17 @@ class Spectrum(object):
                     residual = fi - np.interp(wi, self.wave[idf], flux1[idf])
                     m0 = np.nanmedian(residual)
                     m1 = np.nanmedian(np.abs(residual - m0))
+                    if m1 > self.m1:
+                        m1 = self.m1
                     # idx = np.abs(residual) < 4 * m1
-                    idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & (fi - self.baseline > - 4 * self.m1)
+                    idx = (residual < 4 * m1) & (residual > - 4 * m1) & (fi - self.baseline > - 4 * self.m1)
                     wr.extend(wi[~idx])
                     fr.extend(fi[~idx])
                     fi = fi[idx]
                     wi = wi[idx]
                     di = di[idx]
                     dw = dw[idx]
+                    #ti = ti[idx]
                     """
                     Formula from Wikipedia:
                         en.wikipedia.org/wiki/Weighted_arithmetic_mean#Bootstrapping_validation
@@ -234,7 +314,13 @@ class Spectrum(object):
                         of the pixel. So, the computed error is already correctly
                         normalized to the area of the cube pixel.
                     """
-                    wt = (1 - di**2)**2 * (1 - dw**2)**2
+                    # Biweight
+                    #wt = (1 - di**2)**2 * (1 - dw**2)**2
+                    # Tricube
+                    #wt = (1 - np.abs(di)**3)**3 * (1 - np.abs(dw)**3)**3
+                    # Gaussian
+                    wt = np.exp(- 0.5 * (2.355*di)**2) * np.exp (-0.5 * (2.355*dw)**2) 
+                    #wt *= ti # weight by transmission
                     w1 = np.sum(wt)
                     f0 = np.sum(fi * wt) / w1
                     nt = len(wt)
@@ -328,6 +414,8 @@ def filterSpectrum(wave, w, f, d, delta, radius, areafactor):
                     residual = fi - np.interp(wi, wave[idf], flux1[idf])
                     m0 = np.nanmedian(residual)
                     m1 = np.nanmedian(np.abs(residual - m0))
+                    if m1 > base1:
+                        m1 = base1
                     # idx = np.abs(residual) < 4 * m1
                     idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & (fi - base0 > - 3 * base1)
                     fi = fi[idx]
@@ -341,7 +429,12 @@ def filterSpectrum(wave, w, f, d, delta, radius, areafactor):
                         of the pixel. So, the computed error is already correctly
                         normalized to the area of the cube pixel.
                     """
-                    wt = (1 - di**2)**2 * (1 - dw**2)**2
+                    # Biweight
+                    #wt = (1 - di**2)**2 * (1 - dw**2)**2
+                    # Tricube
+                    #wt = (1 - np.abs(di)**3)**3 * (1 - np.abs(dw)**3)**3
+                    # Gaussian (adopt FWHM half of the window)
+                    wt = np.exp(- 0.5 * (2.355*di)**2) * np.exp (-0.5 * (2.355*dw)**2) 
                     w1 = np.sum(wt)
                     f0 = np.sum(fi * wt) / w1
                     nt = len(wt)
