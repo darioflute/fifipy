@@ -131,7 +131,12 @@ class spectralCloud(object):
         calfiles = fnmatch.filter(os.listdir(path),"*"+extension+"*.fits")
         nstack = 0
         self.pixscale = pixscale
+        x = []
+        y = []
+        w = []
+        f = []
         for calfile in sorted(calfiles):
+            print(calfile)
             with fits.open(os.path.join(path, calfile)) as hlf:
             #hlf = fits.open(os.path.join(path, calfile))
                 header = hlf['PRIMARY'].header
@@ -151,29 +156,36 @@ class spectralCloud(object):
                 #fs = data.UNCORRECTED_DATA / pixfactor   # Normalize for resampling
                 fs = hlf['FLUX'].data / self.pixfactor   # Normalize for resampling
                 ws = hlf['LAMBDA'].data
+                print(np.shape(fs))
                 
-            shape = np.shape(xs)    
-            if len(shape) == 2:
-                nz, nxy = shape
-                xs = xs.reshape(1, nz, 5, 5)
-                ys = ys.reshape(1, nz, 5, 5)
-                ws = ws.reshape(1, nz, 5, 5)
-                fs = fs.reshape(1, nz, 5, 5)
+            x.append(np.ravel(xs))
+            y.append(np.ravel(ys))
+            w.append(np.ravel(ws))
+            f.append(np.ravel(fs))
                 
-            if nstack == 0:
-                x = xs
-                y = ys
-                f = fs
-                w = ws
-                nstack += 1
-            else:
-                x = np.vstack((x, xs))
-                y = np.vstack((y, ys))
-                f = np.vstack((f, fs))
-                w = np.vstack((w, ws))
-                nstack += 1
                 
-            print(np.shape(x))
+            #shape = np.shape(xs)  
+            #if len(shape) == 2:
+            #    nz, nxy = shape
+            #    xs = xs.reshape(1, nz, 5, 5)
+            #    ys = ys.reshape(1, nz, 5, 5)
+            #    ws = ws.reshape(1, nz, 5, 5)
+            #    fs = fs.reshape(1, nz, 5, 5)
+            #    
+            #if nstack == 0:
+            #    x = xs
+            #    y = ys
+            #    f = fs
+            #    w = ws
+            #    nstack += 1
+            #else:
+            #    x = np.vstack((x, xs))
+            #    y = np.vstack((y, ys))
+            #    f = np.vstack((f, fs))
+            #    w = np.vstack((w, ws))
+            #    nstack += 1
+                
+            #print(np.shape(x))
             #ns,nz,ny,nx = np.shape(ws)
             #print(ns,nz,ny,nx)
             #for i in range(ns):
@@ -188,12 +200,19 @@ class spectralCloud(object):
             #        f = np.vstack((f, fs[i]))
             #        w = np.vstack((w, ws[i]))
             #    nstack += 1
+        x = np.concatenate(x)
+        y = np.concatenate(y)
+        w = np.concatenate(w)
+        f = np.concatenate(f)
+        print('shape of f ',np.shape(f))
         #print('stack of ', nstack,' frames')
         idx = np.isfinite(f)
+        print('n finite ',np.sum(idx))
         self.y = y[idx]
         self.x = x[idx]
         self.w = w[idx]
-        self.f = f[idx]        
+        self.f = f[idx]   
+        print('final shape ', np.shape(self.x))
         
     
 class Spectrum(object):
