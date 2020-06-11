@@ -89,8 +89,20 @@ class spectralCloudOld(object):
             #mid = int(header['MISSN-ID'][-3:])
             #ca = np.cos(detangle * np.pi / 180.)
             #sa = np.sin(detangle * np.pi / 180.)
-            ys = data.YS / 3600. + obsbet
-            xs = - data.XS / 3600. / np.cos( ys * np.pi / 180.) + obslam
+            ys = data.YS / 3600.
+            xs = - data.XS / 3600. / np.cos( (ys+obsbet) * np.pi / 180.)
+            skyangle = header['SKY_ANGL']
+            # Rotate coordinates
+            if skyangle != 0:
+                angle = skyangle * np.pi/180.
+                cosa = np.cos(angle)
+                sina = np.sin(angle)
+                x_ = xs.copy()
+                y_ = ys.copy()
+                xs = x_ * cosa + y_ * sina
+                ys = -x_ * sina + y_ * cosa
+            ys += obsbet
+            xs += obslam
             platscale = header['PLATSCAL']
             if channel == 'RED':
                 #pixfactor = (12.2*12.5)/pixscale**2 # size of pixels from Colditz et al. 2018
@@ -143,8 +155,20 @@ class spectralCloud(object):
                 obslam = header['OBSLAM']
                 obsbet = header['OBSBET']
                 channel = header['DETCHAN']
-                ys = hlf['YS'].data / 3600. + obsbet
-                xs = -hlf['XS'].data / 3600. / np.cos( ys * np.pi / 180.) + obslam
+                ys = hlf['YS'].data / 3600.
+                xs = -hlf['XS'].data / 3600. / np.cos( (ys+obsbet) * np.pi / 180.)
+                skyangle = header['SKY_ANGL']
+                # Rotate coordinates
+                if skyangle != 0:
+                    angle = skyangle * np.pi/180.
+                    cosa = np.cos(angle)
+                    sina = np.sin(angle)
+                    x_ = xs.copy()
+                    y_ = ys.copy()
+                    xs = x_ * cosa + y_ * sina
+                    ys = -x_ * sina + y_ * cosa
+                ys += obsbet
+                xs += obslam
                 platscale = header['PLATSCAL']
                 print('channel ', channel)
                 if channel == 'RED':
