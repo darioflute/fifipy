@@ -318,7 +318,7 @@ class Spectrum(object):
                     if m1 > self.m1:
                         m1 = self.m1
                     # idx = np.abs(residual) < 4 * m1
-                    idx = (residual < 4 * m1) & (residual > - 4 * m1) & (fi - self.baseline > - 4 * self.m1)
+                    idx = (residual < 5 * m1) & (residual > - 5 * m1) & (fi - self.baseline > - 4 * self.m1)
                     wr.extend(wi[~idx])
                     fr.extend(fi[~idx])
                     fi = fi[idx]

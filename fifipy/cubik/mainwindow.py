@@ -5,7 +5,7 @@ import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter,
                              QAction, QFileDialog, QVBoxLayout)
 from PyQt5.QtCore import Qt
-from fifipy.cubik.data import spectralCube, spectralCloud, Spectrum
+from fifipy.cubik.data import spectralCube, spectralCloud, spectralCloudOld, Spectrum
 from fifipy.cubik.graphics import (ImageCanvas, SpectrumCanvas, 
                                    SegmentInteractor, CircleInteractor)
 
@@ -111,7 +111,10 @@ class GUI (QMainWindow):
             print('Reading file ', infile)
             self.specCube = spectralCube(infile)
             print('Reading CAL files from ', path)
-            self.specCloud = spectralCloud(path, self.specCube.pixscale)
+            try:
+                self.specCloud = spectralCloud(path, self.specCube.pixscale)
+            except:
+                self.specCloud = spectralCloudOld(path, self.specCube.pixscale)
         except:
             print('The spectral cube cannot be read')
             
