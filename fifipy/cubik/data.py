@@ -367,10 +367,13 @@ class Spectrum(object):
                     w1 = np.sum(wt)
                     f0 = np.sum(fi * wt) / w1
                     nt = len(wt)
-                    e2 = nt / (nt-1) * np.nansum((wt * (fi - f0))**2) / w1**2                    
+                    try:
+                        e2 = nt / (nt-1) * np.nansum((wt * (fi - f0))**2) / w1**2                    
+                        e0 = np.sqrt(e2 / areafactor)
+                    except:
+                        e0 = np.nan
                     #e2 = np.nansum((nt*wt*fi/wtsum - f0)**2)/(nt-1)
                     #e0 = np.sqrt(e2/nt)
-                    e0 = np.sqrt(e2 / areafactor)
                     # Should we consider the ratio circle to pixel ?
                     #biw, sbiw = biweight(fi)
                     #f0 = biw

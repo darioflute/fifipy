@@ -3,7 +3,7 @@ import os
 import sys
 import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter,
-                             QAction, QFileDialog, QVBoxLayout)
+                             QAction, QFileDialog, QVBoxLayout,QInputDialog)
 from PyQt5.QtCore import Qt
 from fifipy.cubik.data import spectralCube, spectralCloud, spectralCloudOld, Spectrum
 from fifipy.cubik.graphics import (ImageCanvas, SpectrumCanvas, 
@@ -141,9 +141,97 @@ class GUI (QMainWindow):
         #print('center circle is ', x0, y0)
         #self.ic.axes.plot(r0, d0, 'o', color='red',transform=self.ic.axes.get_transform('world'))
         self.CI = CircleInteractor(self.ic.axes, (x0, y0), radius)
+        fraction = self.CI.radius/self.CI.hwhm
+        self.ic.fig.canvas.mpl_connect('pick_event', self.onpick)
+        self.ic.xlannotation = self.ic.axes.annotate(" $r/HWHM$ = {:.2f}".format(fraction),
+                                              xy=(0.,-0.1), picker=5, xycoords='axes fraction')
         self.ic.draw_idle()
         self.CI.modSignal.connect(self.onModifiedAperture)
-  
+        self.press = None
+        cid1 = self.ic.mpl_connect('scroll_event', self.onWheel)
+        cid2 = self.ic.mpl_connect('motion_notify_event', self.onMotion)
+        cid3 = self.ic.mpl_connect('button_press_event', self.onPress)
+        
+    def onpick(self, event):
+        """React to onpick events."""
+        print('picked event ', event.artist)
+        if event.artist == self.ic.xlannotation:
+            rnew = self.getDouble(self.CI.radius/self.CI.hwhm)
+            if rnew is not None:
+                print('rnew is ',rnew)
+                # Update caption
+                self.ic.xlannotation.remove()
+                self.ic.xlannotation = self.ic.axes.annotate(" $r/HWHM$ = {:.2f}".format(rnew),
+                                              xy=(0.,-0.1), picker=5, xycoords='axes fraction')
+                self.CI.circle.radius = rnew * self.CI.hwhm
+                self.CI.radius = rnew * self.CI.hwhm
+                self.CI.updateMarkers()
+                self.ic.draw_idle()
+                self.onModifiedAperture('updated aperture')
+                                
+    def getDouble(self, v):
+        value, okPressed = QInputDialog.getDouble(self, "r/HWHM", "r/HWHM", v, 0.1, 10, 3)
+        if okPressed:
+            return value
+        else:
+            return None
+        
+    def onWheel(self, event):
+        eb = event.button
+        self.zoomImage(eb)
+        
+    def zoomUp(self):
+        self.zoomImage('up')
+    
+    def zoomDown(self):
+        self.zoomImage('down')
+        
+    def zoomImage(self, eb):
+        ic = self.ic
+        curr_xlim = ic.axes.get_xlim()
+        curr_ylim = ic.axes.get_ylim()
+        curr_x0 = (curr_xlim[0]+curr_xlim[1])*0.5
+        curr_y0 = (curr_ylim[0]+curr_ylim[1])*0.5
+        if eb == 'up':
+            factor=0.9
+        elif eb == 'down':
+            factor=1.1
+        new_width = (curr_xlim[1]-curr_xlim[0])*factor*0.5
+        new_height= (curr_ylim[1]-curr_ylim[0])*factor*0.5
+        x = [curr_x0-new_width,curr_x0+new_width]
+        y = [curr_y0-new_height,curr_y0+new_height]
+        ic.axes.set_xlim(x)
+        ic.axes.set_ylim(y)
+        ic.fig.canvas.draw_idle()
+        
+    def onPress(self, event):
+        if event.inaxes:
+            self.press = event.xdata, event.ydata
+        else:
+            self.press = None
+            return
+        
+    def onMotion(self, event):
+        if self.press is None:
+            return
+        if event.inaxes:
+            dx = event.xdata - self.press[0]
+            dy = event.ydata - self.press[1]
+            # self.press = (event.x, event.y)
+        else:
+            return
+        if event.button == 2:
+            # Pan using the mouse middle button
+            ic = self.ic
+            xlim = np.asarray(ic.axes.get_xlim())
+            ylim = np.asarray(ic.axes.get_ylim())
+            x = xlim - dx
+            y = ylim - dy
+            ic.axes.set_xlim(x)
+            ic.axes.set_ylim(y)
+            ic.fig.canvas.draw_idle()
+        
+            
     def initializeSpectrum(self):
         """Display the spectrum and cloud of flux points at location in image."""
         # Communicate new spectrum to spectral window
@@ -155,6 +243,12 @@ class GUI (QMainWindow):
         sc = self.specCloud
         radius = self.CI.circle.radius
         if event != 'segment modified':
+            if self.CI.radius != radius:
+                self.CI.radius = radius
+                fraction = self.CI.radius/self.CI.hwhm
+                self.ic.xlannotation.remove()
+                self.ic.xlannotation = self.ic.axes.annotate(" $r/HWHM$ = {:.2f}".format(fraction),
+                                              xy=(0.,-0.1), picker=5, xycoords='axes fraction')
             xc, yc = self.CI.circle.center
             # Select points inside 
             x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)
@@ -192,18 +286,33 @@ class GUI (QMainWindow):
             self.sc.drawSpectrum()
             self.SI = SegmentInteractor(self.sc.ax1, (medw, self.sc.spectrum.baseline-self.sc.spectrum.m1*5), 
                                         self.length, color='Blue')
-            #self.sc.draw_idle()
-            self.SI.modSignal.connect(self.onModifiedAperture)
+            self.SI.modSignal.connect(self.onModifiedAperture)            
+            self.sc.fig.canvas.mpl_connect('pick_event', self.onpick2)
+            self.sc.xlannotation = self.sc.ax3.annotate(" $d/HWHM$ = {:.2f}".format(self.SI.delta/self.SI.fwhm),
+                                              xy=(0.,-0.5), picker=5, xycoords='axes fraction')                        
         else:
-            #print('delta ', self.SI.delta)
             self.sc.spectrum.set_filter(self.SI.delta, radius, s.pixscale)
             self.sc.drawSpectrum()
-            #medf = np.nanpercentile(self.sc.spectrum.f, 10)
             x, y = zip(*self.SI.xy)
             siy = self.sc.spectrum.baseline-self.sc.spectrum.m1*5
             self.SI.xy = [(x_, siy) for x_ in x]
             self.SI.updateLinesMarkers()
+            # Update caption
+            self.sc.xlannotation.remove()
+            self.sc.xlannotation = self.sc.ax3.annotate(" $d/HWHM$ = {:.2f}".format(self.SI.delta/self.SI.fwhm),
+                                          xy=(0.,-0.5), picker=5, xycoords='axes fraction')
+            
 
+    def onpick2(self, event):
+        """React to onpick events."""
+        print('picked event ', event.artist)
+        if event.artist == self.sc.xlannotation:
+            rnew = self.getDouble(self.SI.delta/self.SI.fwhm)
+            if rnew is not None:
+                print('rnew is ',rnew)
+                self.SI.delta  = self.SI.fwhm * rnew
+                self.onModifiedAperture('segment_modified')
+                
 
     def newUncertainty(self, event):
         """ Compute and save new uncertainty for the WXY file. """

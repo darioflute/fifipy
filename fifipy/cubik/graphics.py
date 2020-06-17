@@ -180,10 +180,10 @@ class SegmentInteractor(QObject):
         self.modSignal.emit('segment modified')
 
     def updateLinesMarkers(self):
-        #self.line.set_data(zip(*self.xy))
         x, y = zip(*self.xy)
         xm = self.center + np.array([-0.5,0.,0.5]) * self.delta
         xf = self.center + np.array([-0.5, 0.5]) * self.fwhm
+        x = self.center + np.array([-0.5, 0.5]) * self.delta
         ym = y[0] * np.ones(3)
         self.line.set_data(x, y)
         self.markers.set_data(xm, ym)
@@ -214,7 +214,7 @@ class CircleInteractor(QObject):
         sys.setrecursionlimit(10000) # 10000 is 10x the default value
 
         self.hwhm = radius
-        self.radius = radius * 1.5
+        self.radius = radius * 1.0
         self.ax = ax
         # Start with 1.5 x FWHM
         self.circle = Circle(center, self.radius, edgecolor='Lime',
@@ -498,6 +498,8 @@ class ImageCanvas(MplCanvas):
         high = np.nanpercentile(np.ravel(image),98)
         self.image.set_clim(low,high)
         self.draw_idle()
+        
+
 
 class SpectrumCanvas(MplCanvas):
     """Canvas with spectrum and cloud of fluxes."""
