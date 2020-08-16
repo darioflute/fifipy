@@ -751,3 +751,42 @@ def baryshift(obsdate, ra, dec, equinox='J2000'):
     result = vlsr / speed_of_light
    
     return result.value
+
+
+def computeWVZ(wvzdir,flight,atran1,atran2):
+    import numpy as np
+    from fifipy.wvz import computeMeanFlux, computeAtran, getGroups, computeAtranTot
+    import time
+    import os
+
+    swgroups, lwgroups = getGroups(wvzdir, 'FLT'+flight)
+    ngroups = len(lwgroups)
+    alt = []
+    wmblue = []
+    wmred = []
+    wmtot = []
+    numfile = []
+    for i, (swgroup, lwgroup) in enumerate(zip(swgroups, lwgroups)):
+        print(i+1 ,' / ', ngroups)
+        fileparts = os.path.basename(swgroup[0]).split('_')
+        numfile.append(fileparts[0])
+        t0 = time.process_time()
+        wavesb, fluxesb, detchanb, orderb, zab, altitudeb = computeMeanFlux(swgroup)
+        wvmin, alpha, wblue, fblue = computeAtran(wavesb, fluxesb, detchanb, orderb, zab, altitudeb, atrandata=atran2, plot=False)
+        wmblue.append(wvmin)
+        wavesr, fluxesr, detchanr, orderr, zar, altituder = computeMeanFlux(lwgroup)
+        wvmin, alpha, wred, fred = computeAtran(wavesr, fluxesr, detchanr, orderr, zar, altituder, atrandata=atran1, plot=False)
+        wmred.append(wvmin)
+        # Two fluxes at same time
+        wvmin = computeAtranTot(wred, fred, wblue ,fblue, zar, altituder, atran1, atran2)
+        wmtot.append(wvmin)
+        t1 = time.process_time()
+        #print('Data processed in ', t1-t0, ' s.')
+        alt.append(altitudeb)
+    alt = np.array(alt)
+    wmblue = np.array(wmblue)
+    wmred = np.array(wmred)
+    wmtot = np.array(wmtot)
+    numfile = np.array(numfile)   
+    
+    return alt, wmblue, wmred, wmtot, numfile, swgroups, lwgroups
