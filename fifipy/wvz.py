@@ -404,8 +404,9 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         #w1 = 0.5 * (lc1[0] + lc1[1])
         #w2 = 0.5 * (lc2[0] + lc2[1])
         #ftot -= np.interp(wtot, np.array([w1,w2]), np.array([f1,f2]))
-        lc = [148.0,148.3]
-        #lc = [149.3, 149.6]
+        #lc = [148.1, 148.3]
+        lc = [149.3, 149.6]
+        #lc = [148.0, 148.2]
         lm = [146.85,147]
         idmin = (wtot > lc[0]) & (wtot < lc[1])
         idmax = (wtot > lm[0]) & (wtot < lm[1])
@@ -499,7 +500,9 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     
     #lc = [149.3, 149.6]
     #lm = [146.8,147.0]
-    lc = [148.0,148.3]
+    lc = [149.3, 149.6]
+    #lc = [148.0,148.3]
+    #lc = [148.0, 148.2]    
     lm = [146.85,147]
     idrmin = (wtr > lc[0]) & (wtr < lc[1])
     idrmax = (wtr > lm[0]) & (wtr < lm[1])
@@ -694,12 +697,14 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
         ax.plot(alt[idx], wmon[idx], 'o',color='green',label='monitor')
     ax.set_xlabel('Altitude')
     ax.set_ylabel('Water Vapor Zenith [$\mu m$]')
+    ax.grid(which='both')
     ax.legend()
     ax = axes[1]
     ax.plot(wmon[idx], wblue[idx]/wmon[idx],'o',color='blue')
     ax.plot(wmon[idx], wred[idx]/wmon[idx],'o',color='red')
     ax.set_xlabel('WVZ monitor')
     ax.set_ylabel('WVZ fit/monitor')
+    ax.grid(which='both')
     plt.show()
     
     return date, time, temp, wmon, fig1
