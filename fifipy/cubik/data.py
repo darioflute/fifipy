@@ -149,7 +149,7 @@ class spectralCloud(object):
         f = []
         for calfile in sorted(calfiles):
             print(calfile)
-            with fits.open(os.path.join(path, calfile)) as hlf:
+            with fits.open(os.path.join(path, calfile), memmap=False) as hlf:
             #hlf = fits.open(os.path.join(path, calfile))
                 header = hlf['PRIMARY'].header
                 obslam = header['OBSLAM']

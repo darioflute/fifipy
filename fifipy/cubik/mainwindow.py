@@ -9,6 +9,9 @@ from fifipy.cubik.data import spectralCube, spectralCloud, spectralCloudOld, Spe
 from fifipy.cubik.graphics import (ImageCanvas, SpectrumCanvas, 
                                    SegmentInteractor, CircleInteractor)
 
+import warnings
+warnings.filterwarnings('ignore')
+
 class GUI (QMainWindow):
     
     def __init__(self):
@@ -148,9 +151,12 @@ class GUI (QMainWindow):
         self.ic.draw_idle()
         self.CI.modSignal.connect(self.onModifiedAperture)
         self.press = None
+        self.ptime = None
+        self.dv = 0
         cid1 = self.ic.mpl_connect('scroll_event', self.onWheel)
         cid2 = self.ic.mpl_connect('motion_notify_event', self.onMotion)
         cid3 = self.ic.mpl_connect('button_press_event', self.onPress)
+        cid4 = self.ic.mpl_connect('button_release_event', self.onRelease)
         
     def onpick(self, event):
         """React to onpick events."""
@@ -205,19 +211,33 @@ class GUI (QMainWindow):
         ic.fig.canvas.draw_idle()
         
     def onPress(self, event):
+        import time
         if event.inaxes:
             self.press = event.xdata, event.ydata
+            self.ptime = (event.x, event.y, time.time())
         else:
             self.press = None
+            self.ptime = None
             return
         
+    def onRelease(self, event):
+        print('mouse released')
+        self.press = None
+        self.ptime = None
+        self.dv = 0
+        
     def onMotion(self, event):
+        import time
         if self.press is None:
             return
         if event.inaxes:
             dx = event.xdata - self.press[0]
             dy = event.ydata - self.press[1]
-            # self.press = (event.x, event.y)
+            d = np.hypot(self.ptime[0]-event.x, self.ptime[1]-event.y)
+            dt = time.time() - self.ptime[2]
+            self.ptime = (event.x, event.y, time.time())
+            self.dv = d/dt
+            print('d, dt', d, dt, self.dv)
         else:
             return
         if event.button == 2:
@@ -239,6 +259,7 @@ class GUI (QMainWindow):
         
     def onModifiedAperture(self, event):
         """Reacts to change in position and size of aperture."""
+ 
         s = self.specCube
         sc = self.specCloud
         radius = self.CI.circle.radius
@@ -250,21 +271,23 @@ class GUI (QMainWindow):
                 self.ic.xlannotation = self.ic.axes.annotate(" $r/HWHM$ = {:.2f}".format(fraction),
                                               xy=(0.,-0.1), picker=5, xycoords='axes fraction')
             xc, yc = self.CI.circle.center
-            # Select points inside 
-            x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)
-            distance = np.hypot(x0 - xc, y0 - yc)   # distance in pixels
-            idx = distance <= radius
-            dists = distance[idx]
-            w = sc.w[idx]
-            f = sc.f[idx]        
-            # Choose closest grid point for specCube
-            pdistance = np.hypot(s.points[:,0] - xc, s.points[:,1] - yc)
-            imin = np.argmin(pdistance)
-            flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
-            eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
-            self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, 
-                                        s.at, s.radius / self.ic.pixscale)
-            self.sc.spectrum.set_colors()
+            print('dv ',self.dv)
+            if self.dv < 20.:  # to check if we have to adapt
+                # Select points inside 
+                x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)
+                distance = np.hypot(x0 - xc, y0 - yc)   # distance in pixels
+                idx = distance <= radius
+                dists = distance[idx]
+                w = sc.w[idx]
+                f = sc.f[idx]        
+                # Choose closest grid point for specCube
+                pdistance = np.hypot(s.points[:,0] - xc, s.points[:,1] - yc)
+                imin = np.argmin(pdistance)
+                flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
+                eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
+                self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, 
+                                            s.at, s.radius / self.ic.pixscale)
+                self.sc.spectrum.set_colors()
         if event == 'segment modified':
             # check if the segment has shifted
             c = self.SI.center
@@ -291,16 +314,17 @@ class GUI (QMainWindow):
             self.sc.xlannotation = self.sc.ax3.annotate(" $d/HWHM$ = {:.2f}".format(self.SI.delta/self.SI.fwhm),
                                               xy=(0.,-0.5), picker=5, xycoords='axes fraction')                        
         else:
-            self.sc.spectrum.set_filter(self.SI.delta, radius, s.pixscale)
-            self.sc.drawSpectrum()
-            x, y = zip(*self.SI.xy)
-            siy = self.sc.spectrum.baseline-self.sc.spectrum.m1*5
-            self.SI.xy = [(x_, siy) for x_ in x]
-            self.SI.updateLinesMarkers()
-            # Update caption
-            self.sc.xlannotation.remove()
-            self.sc.xlannotation = self.sc.ax3.annotate(" $d/HWHM$ = {:.2f}".format(self.SI.delta/self.SI.fwhm),
-                                          xy=(0.,-0.5), picker=5, xycoords='axes fraction')
+            if self.dv < 2:
+                self.sc.spectrum.set_filter(self.SI.delta, radius, s.pixscale)
+                self.sc.drawSpectrum()
+                x, y = zip(*self.SI.xy)
+                siy = self.sc.spectrum.baseline-self.sc.spectrum.m1*5
+                self.SI.xy = [(x_, siy) for x_ in x]
+                self.SI.updateLinesMarkers()
+                # Update caption
+                self.sc.xlannotation.remove()
+                self.sc.xlannotation = self.sc.ax3.annotate(" $d/HWHM$ = {:.2f}".format(self.SI.delta/self.SI.fwhm),
+                                                            xy=(0.,-0.5), picker=5, xycoords='axes fraction')
             
 
     def onpick2(self, event):
