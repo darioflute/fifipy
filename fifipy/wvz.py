@@ -248,7 +248,7 @@ def computeXcorr(wtot, ftot, wt, at):
         fi = np.interp(wt, wsky/(1+z), fsky)
         fi[wt < wmin] = 0
         fi[wt > wmax] = 0
-        n = np.sum(fi > 0)
+        #n = np.sum(fi > 0)
         corr.append(np.sum(fi*at))
         
     i = np.argmax(corr)
@@ -324,8 +324,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         lm = [63.30,63.34]
         idmin = ((wtot > lc[0]) & (wtot < lc[1])) #| ((wtot > lc1[0]) & (wtot < lc1[1]))
         idmax = (wtot > lm[0]) & (wtot < lm[1])
-        fmin = np.nanmean(ftot[idmin])
-        fmax = np.nanmean(ftot[idmax])
+        fmin = np.nanmedian(ftot[idmin])
+        fmax = np.nanmedian(ftot[idmax])
         df = fmax - fmin
         ftotabs = 1-(ftot-fmin)/df
         # Normalize at the same way the ATRAN models
@@ -334,8 +334,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         idmax = (wt > lm[0]) & (wt < lm[1])
         for t, wv in zip(at, wvs):
             t = t**depth  # Apply the ZA
-            tmax = np.nanmean(t[idmin])
-            tmin = np.nanmean(t[idmax])
+            tmax = np.nanmedian(t[idmin])
+            tmin = np.nanmedian(t[idmax])
             t = (t-tmin)/(tmax-tmin)  # Normalize
             ti  = np.interp(wtot,wt,t)
             idx = ftotabs < 1.1
@@ -358,14 +358,14 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             pass
             
         t = at[imin]**depth
-        tmax = np.nanmean(t[idmin])
-        tmin = np.nanmean(t[idmax])
+        tmax = np.nanmedian(t[idmin])
+        tmin = np.nanmedian(t[idmax])
         t = (t-tmin)/(tmax-tmin) # Normalize
         
         # We can cross-correlate here
         if xcorr:
             zcorr = computeXcorr(wtot, ftotabs, wt, t)
-            waves /= 1 + zcorr
+            #waves /= 1 + zcorr
 
         if plot:
             fig,axes = plt.subplots(1, 3, figsize=(16,5), sharey=True,
@@ -410,8 +410,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         lm = [146.85,147]
         idmin = (wtot > lc[0]) & (wtot < lc[1])
         idmax = (wtot > lm[0]) & (wtot < lm[1])
-        fmin = np.nanmean(ftot[idmin])
-        fmax = np.nanmean(ftot[idmax])
+        fmin = np.nanmedian(ftot[idmin])
+        fmax = np.nanmedian(ftot[idmax])
         df = fmax - fmin
         ftotabs = 1-(ftot-fmin)/df
         # Normalize at the same way the ATRAN models
@@ -420,8 +420,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         idmax = (wt > lm[0]) & (wt < lm[1])
         for t,wv in zip(at,wvs):
             t = t**depth  # Apply the ZA
-            tmax = np.nanmean(t[idmin])
-            tmin = np.nanmean(t[idmax])
+            tmax = np.nanmedian(t[idmin])
+            tmin = np.nanmedian(t[idmax])
             t = (t-tmin)/(tmax-tmin)  # Normalize
             ti  = np.interp(wtot,wt,t)
             idx = ftotabs < 1.2
@@ -443,17 +443,15 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             pass
 
         t = at[imin]**depth
-        tmax = np.nanmean(t[idmin])
-        tmin = np.nanmean(t[idmax])
+        tmax = np.nanmedian(t[idmin])
+        tmin = np.nanmedian(t[idmax])
         t = (t-tmin)/(tmax-tmin) # Normalize
         # We can cross-correlate here
         if xcorr:
             zcorr = computeXcorr(wtot, ftotabs, wt, t)
-            waves /= 1 + zcorr
+            #waves /= 1 + zcorr
 
         if plot:
-            
-            
             fig,axes = plt.subplots(1,2,figsize=(16,5),sharey=True, 
                                     gridspec_kw = {'width_ratios': [2,6]})
             ax=axes[0]
@@ -498,11 +496,8 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     idbmin = (wtb > lc[0]) & (wtb < lc[1])
     idbmax = (wtb > lm[0]) & (wtb < lm[1])
     
-    #lc = [149.3, 149.6]
-    #lm = [146.8,147.0]
     lc = [149.3, 149.6]
     #lc = [148.0,148.3]
-    #lc = [148.0, 148.2]    
     lm = [146.85,147]
     idrmin = (wtr > lc[0]) & (wtr < lc[1])
     idrmax = (wtr > lm[0]) & (wtr < lm[1])
@@ -510,14 +505,14 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     diff = []
     for tr, tb, wv in zip(atr, atb, wvs):
         tb = tb**depth  # Apply the ZA
-        tmax = np.nanmean(tb[idbmin])
-        tmin = np.nanmean(tb[idbmax])
+        tmax = np.nanmedian(tb[idbmin])
+        tmin = np.nanmedian(tb[idbmax])
         tb = (tb-tmin)/(tmax-tmin)  # Normalize
         tbi  = np.interp(wblue,wtb,tb)
         idxb = fblue < 1.1
         tr = tr**depth  # Apply the ZA
-        tmax = np.nanmean(tr[idrmin])
-        tmin = np.nanmean(tr[idrmax])
+        tmax = np.nanmedian(tr[idrmin])
+        tmin = np.nanmedian(tr[idrmax])
         tr = (tr-tmin)/(tmax-tmin)  # Normalize
         tri  = np.interp(wred,wtr,tr)
         idxr = fred < 1.1
@@ -665,10 +660,13 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
     ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
     ax.grid(which='both')
     ax = axes[2]
-    ax.loglog(time,wblue, 'o', color='blue',label='blue')
-    ax.loglog(time,wred, 'o', color='red',label='red')
-    ax.loglog(time,wtot, 'o', color='black',label='red + blue',
-              markerfacecolor='None', markersize=15)
+    if len(wblue) > 0:
+        ax.loglog(time,wblue, 'o', color='blue',label='blue')
+    if len(wred) > 0:
+        ax.loglog(time,wred, 'o', color='red',label='red')
+    if len(wtot) > 0:
+        ax.loglog(time,wtot, 'o', color='black',label='red + blue',
+                  markerfacecolor='None', markersize=15)
     if monitor:
         ax.loglog(time,wmon, 'o', color='green',label='monitor')
     for axis in [ax.xaxis, ax.yaxis]:
@@ -691,8 +689,10 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
     fig2,axes = plt.subplots(1,2,figsize=(15,5))
     idx = temp < -5
     ax = axes[0]
-    ax.plot(alt[idx], wblue[idx], 'o',color='blue',label='blue')
-    ax.plot(alt[idx], wred[idx], 'o',color='red',label='red')
+    if len(wblue) > 0:
+        ax.plot(alt[idx], wblue[idx], 'o',color='blue',label='blue')
+    if len(wred) > 0:
+        ax.plot(alt[idx], wred[idx], 'o',color='red',label='red')
     if monitor:
         ax.plot(alt[idx], wmon[idx], 'o',color='green',label='monitor')
     ax.set_xlabel('Altitude')
@@ -700,8 +700,10 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
     ax.grid(which='both')
     ax.legend()
     ax = axes[1]
-    ax.plot(wmon[idx], wblue[idx]/wmon[idx],'o',color='blue')
-    ax.plot(wmon[idx], wred[idx]/wmon[idx],'o',color='red')
+    if len(wblue) > 0:
+        ax.plot(wmon[idx], wblue[idx]/wmon[idx],'o',color='blue')
+    if len(wred) > 0:
+        ax.plot(wmon[idx], wred[idx]/wmon[idx],'o',color='red')
     ax.set_xlabel('WVZ monitor')
     ax.set_ylabel('WVZ fit/monitor')
     ax.grid(which='both')
@@ -727,7 +729,6 @@ def baryshift(obsdate, ra, dec, equinox='J2000'):
     import astropy.constants as const
     from astropy.coordinates import (UnitSphericalRepresentation, FK5, 
                                      solar_system, CartesianRepresentation)
-    from astropy.io import fits
     from astropy.time import Time
     import astropy.units as u
 
@@ -761,7 +762,7 @@ def baryshift(obsdate, ra, dec, equinox='J2000'):
 def computeWVZ(wvzdir,flight,atran1,atran2):
     import numpy as np
     from fifipy.wvz import computeMeanFlux, computeAtran, getGroups, computeAtranTot
-    import time
+    #import time
     import os
 
     swgroups, lwgroups = getGroups(wvzdir, 'FLT'+flight)
@@ -771,27 +772,44 @@ def computeWVZ(wvzdir,flight,atran1,atran2):
     wmred = []
     wmtot = []
     numfile = []
-    for i, (swgroup, lwgroup) in enumerate(zip(swgroups, lwgroups)):
-        print(i+1 ,' / ', ngroups)
-        fileparts = os.path.basename(swgroup[0]).split('_')
-        numfile.append(fileparts[0])
-        t0 = time.process_time()
-        wavesb, fluxesb, detchanb, orderb, zab, altitudeb = computeMeanFlux(swgroup)
-        wvmin, alpha, wblue, fblue = computeAtran(wavesb, fluxesb, detchanb, orderb, zab, altitudeb, atrandata=atran2, plot=False)
-        wmblue.append(wvmin)
-        wavesr, fluxesr, detchanr, orderr, zar, altituder = computeMeanFlux(lwgroup)
-        wvmin, alpha, wred, fred = computeAtran(wavesr, fluxesr, detchanr, orderr, zar, altituder, atrandata=atran1, plot=False)
-        wmred.append(wvmin)
-        # Two fluxes at same time
-        wvmin = computeAtranTot(wred, fred, wblue ,fblue, zar, altituder, atran1, atran2)
-        wmtot.append(wvmin)
-        t1 = time.process_time()
-        #print('Data processed in ', t1-t0, ' s.')
-        alt.append(altitudeb)
+
+    if swgroups == []:
+        for i, lwgroup in enumerate(lwgroups):
+            print(i+1 ,' / ', ngroups)
+            fileparts = os.path.basename(lwgroup[0]).split('_')
+            numfile.append(fileparts[0])
+            #t0 = time.process_time()
+            wavesr, fluxesr, detchanr, orderr, zar, altituder = computeMeanFlux(lwgroup)
+            wvmin, alpha, wred, fred = computeAtran(wavesr, fluxesr, detchanr, orderr, zar, altituder, atrandata=atran1, plot=True)
+            wmred.append(wvmin)
+            alt.append(altituder)        
+    else:
+        for i, (swgroup, lwgroup) in enumerate(zip(swgroups, lwgroups)):
+            print(i+1 ,' / ', ngroups)
+            fileparts = os.path.basename(swgroup[0]).split('_')
+            numfile.append(fileparts[0])
+            #t0 = time.process_time()
+            wavesb, fluxesb, detchanb, orderb, zab, altitudeb = computeMeanFlux(swgroup)
+            wvmin, alpha, wblue, fblue = computeAtran(wavesb, fluxesb, detchanb, orderb, zab, altitudeb, atrandata=atran2, plot=False)
+            wmblue.append(wvmin)
+            wavesr, fluxesr, detchanr, orderr, zar, altituder = computeMeanFlux(lwgroup)
+            wvmin, alpha, wred, fred = computeAtran(wavesr, fluxesr, detchanr, orderr, zar, altituder, atrandata=atran1, plot=False)
+            wmred.append(wvmin)
+            # Two fluxes at same time
+            wvmin = computeAtranTot(wred, fred, wblue ,fblue, zar, altituder, atran1, atran2)
+            wmtot.append(wvmin)
+            #t1 = time.process_time()
+            #print('Data processed in ', t1-t0, ' s.')
+            alt.append(altitudeb)
     alt = np.array(alt)
     wmblue = np.array(wmblue)
     wmred = np.array(wmred)
     wmtot = np.array(wmtot)
-    numfile = np.array(numfile)   
+    numfile = np.array(numfile)  
+    
+    if len(wmblue) == 0:
+        wmblue = np.zeros(len(wmred))
+    if len(wmtot) == 0:
+        wmtot = np.zeros(len(wmred))
     
     return alt, wmblue, wmred, wmtot, numfile, swgroups, lwgroups

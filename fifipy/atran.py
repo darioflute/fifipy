@@ -292,7 +292,7 @@ def getATransBand(band, altitude, za, wv):
     wgrid = [w]    
     while w < w2:
         dw = w / getResolution(band, w)
-        w += dw/3.
+        w += dw/5.
         wgrid.append(w)
 
     # Convolve with spectral resolution
