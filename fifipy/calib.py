@@ -134,7 +134,7 @@ def mwaveCal(gratpos, dichroic, obsdate, array, order):
     QOFF = w1.loc[6][co]
     QS = w1.loc[7][co]
     ISOFF = w1.loc[8:][co].values
-
+        
     ng = len(gratpos)
     pix = np.arange(16) + 1.
     result = np.zeros((ng, 16, 25))

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-def reduceData(rootdir):
+def reduceData(rootdir, names=None):
     """
     Reduction of wavelength calibration data taken in the lab
 
@@ -27,7 +27,8 @@ def reduceData(rootdir):
     if not os.path.exists(rootdir+'Reduced/'):
         os.makedirs(rootdir+'Reduced/')
     
-    names = np.arange(1,50)
+    if names == None:
+        names = np.arange(1,50)
     for channel in ['sw','lw']:
         for name in names:
             filenames = '*GC'+str(name)+'-*'+channel+'.fits'
@@ -40,7 +41,7 @@ def reduceData(rootdir):
                 mask = dgrat > np.nanmedian(dgrat)*3
                 # Break into pieces
                 if np.sum(mask) > 0:
-                    idx, = np.argwhere(dgrat > np.nanmedian(dgrat)*3)+1
+                    idx, = np.argwhere(dgrat > np.nanmedian(dgrat)*5)+1
                     idx = np.append(idx, len(files))
                 else:
                     idx = [len(files)]
@@ -177,23 +178,30 @@ def lineclean(x, y):
     """
     #from scipy.signal import medfilt
     import numpy as np
+    #ysmooth = y.copy()
     # Filter out sudden variation of flux
     #for k in range(2):
-    #    dy = y - medfilt(y,3)
+    #    dy = ysmooth - medfilt(ysmooth,3)
     #    med = np.nanmedian(dy)
     #    mad = np.nanmedian(np.abs(dy - med))
-    #     y3 = np.abs(dy) > 5*mad
-    #    y[y3] = np.nan 
+    #    y3 = np.abs(dy) > 5*mad
+    #    ysmooth[y3] = np.nan 
     # Eliminate values under the median of the lowest 50% 
     med = np.nanmedian(y)
     med50 = np.nanmedian(y[y < med])
     y3 = (y < (med50 * 0.5)) | (y < 0)
     y[y3] = np.nan 
+    #ysmooth[y3] = np.nan
     # Interpolate spectrum
     idnan = np.isfinite(y)
     if np.sum(~idnan) > 0:
         ispec = np.interp(x[~idnan], x[idnan],y[idnan])
         y[~idnan] = ispec
+    #idnan = np.isfinite(ysmooth)
+    #if np.sum(~idnan) > 0:
+    #    ispec = np.interp(x[~idnan], x[idnan],ysmooth[idnan])
+    #    ysmooth[~idnan] = ispec
+    #return ysmooth
         
         
 def searchtop(g,f,cen):
@@ -207,18 +215,19 @@ def searchtop(g,f,cen):
         i1 = imax-3
         i2 = imax+3
         delta = 0
-        if i1 < 0:
-            i1 = 0
-        if i2 > ng-1:
-            i2 = ng-1
-        if imax > i1+1:
-            if np.nanmax(f[i1:imax]) > fmax:
-                delta = -1
-                fmax = np.nanmax(f[i1:imax])
-        if imax < i2-1:
-            if np.nanmax(f[imax+1:i2]) > fmax:
-                delta = +1
-                fmax = np.nanmax(f[imax+1:i2])
+        #if i1 < 0:
+        #    i1 = 0
+        #if i2 > ng-1:
+        #    i2 = ng-1
+        if (i1 >= 0) & (i2 < ng):
+            if imax > i1+1:
+                if np.nanmedian(f[i1:imax]) > fmax:
+                    delta = -1
+                    fmax = np.nanmedian(f[i1:imax])
+            if imax < i2-1:
+                if np.nanmedian(f[imax+1:i2]) > fmax:
+                    delta = +1
+                    fmax = np.nanmedian(f[imax+1:i2])
         if delta == 0:
             return imax
         else:
@@ -235,12 +244,12 @@ def fitLines(wlines, fwhms, g, w, specs, i, j):
     from lmfit.models import PseudoVoigtModel, QuadraticModel
     
     interpg = np.interp(wlines, w[:,j,i], g)
-    interpg_ = np.interp(wlines-fwhms, w[:,j,i], g)
-    dg = np.abs(interpg_-interpg)
+    #interpg_ = np.interp(wlines-fwhms, w[:,j,i], g)
+    #dg = np.abs(interpg_-interpg)
     # Fit with new guess values
     gmedian = np.nanmedian(g)
     cen = interpg - gmedian
-    wid = dg
+    wid = fwhms * 0.5
     x = g.copy() - gmedian
     y = specs[:,i,j].copy()
     lineclean(x, y)
@@ -271,108 +280,62 @@ def fitLines(wlines, fwhms, g, w, specs, i, j):
         for k in range(1, len(cen)):
             model += PseudoVoigtModel(prefix='l' + str(k) + '_')
 
-    #model = QuadraticModel(prefix='q_')
-    #for k in range(len(cen)):
-    #    model += PseudoVoigtModel(prefix='l' + str(k) + '_')
     params = model.make_params()
-    #params['q_a'].set(0, vary=True)
-    #params['q_b'].set(slope, vary=True)
-    #params['q_c'].set(intercept, vary=True)
-    # Define lines
-    #amps = np.empty(len(cen))
-    #icen = np.empty(len(cen))
-    if len(cen) > 1:
-        dcen = np.nanmin(cen[1:]-cen[:-1])
-    else:
-        dcen = (np.nanmax(x)-np.nanmin(x))*0.5
     ncen = len(cen)
     for k, (c,d) in enumerate(zip(cen,wid)):
         li = 'l' + str(k) + '_'
-        if d < 100:
-            d = 100
-        if d > dcen:
-            d = dcen
-        imax = searchtop(x, y, c)
-        #amps[k] = y[imax]
-        #c = g[imax] - gmedian
-        if np.abs(c - x[imax]) < d*0.5:
-            c = x[imax]
-        if ncen > 1:
-            if k > 0:
-                distance = cen[k]-cen[k-1]
-                if distance < d*2:
-                    d = distance/3
-            if k < ncen-1:
-                distance = cen[k+1]-cen[k]
-                if distance < d*2:
-                    d = distance/3
-        clow = c - d/2
-        chigh = c + d/2
-        #icen[k] = imax
-        #cen[k] = c
-        #
-        a = y[imax]# - (intercept + slope * c)
-        #if a < 0.5: # cut short lines on 1st try
-            #a = 0
-        #    pass
-        #else:
-        #if a < 0:
-        #    a = 0
-        #if a > 0.1:
-        a *= np.sqrt(2*np.pi) * d/2.355
-        params[li + 'center'].set(c, min=clow, max=chigh)
-        params[li + 'amplitude'].set(a)
-        params[li + 'sigma'].set(d)
-        params[li + 'fraction'].set(0.0, vary=True) # Use Gaussian first
+        if (c > np.min(x)+3*d) & (c < np.max(x)-3*d):
+            imax = searchtop(x, y, c)
+            if np.abs(c - x[imax]) < d:
+                #print('in ', c, x[imax])
+                c = x[imax]
+            #else:
+                #print('out ', c)
+            if ncen > 1:
+                if k > 0:
+                    distance = cen[k]-cen[k-1]
+                    if distance < d*2:
+                        d = distance/3
+                if k < ncen-1:
+                    distance = cen[k+1]-cen[k]
+                    if distance < d*2:
+                        d = distance/3
+            a = y[imax] # - (intercept + slope * c)
+            a *= np.sqrt(2*np.pi) * d/2.355
+            clow = c - d/2
+            chigh = c + d/2
+            params[li + 'center'].set(c, min=clow, max=chigh)
+            params[li + 'sigma'].set(d, min=d*0.5, max=d*2)
+            params[li + 'fraction'].set(0.0, vary=True)
+            params[li + 'amplitude'].set(a, min=a*0.5, max=a*3)
+        else:
+            a = 1
+            params[li + 'center'].set(c, vary=False)
+            params[li + 'sigma'].set(d, vary=False)
+            params[li + 'fraction'].set(0.0, vary=False)
+            params[li + 'amplitude'].set(a)
+        
 
     result = model.fit(y, params, x=x, method='leastsq')
-# =============================================================================
-#     comps = result.eval_components(x=x)
-#             
-#     #2nd run: allow quadratic component for continuum
-#     params['q_a'].set(0, vary=True)
-#     params['q_b'].set(result.params['q_b'].value, vary=True)
-#     params['q_c'].set(result.params['q_c'].value, vary=True)
-#     # Define lines
-#     y = specs[:,i,j].copy()  
-#     y3 = (y<comps['q_']*0.5) | (y<0)
-#     y[y3] = np.nan
-#     idnan = np.isfinite(y)
-#     if np.sum(idnan) == 0:
-#         y = specs[:,i,j].copy()  
-#     else:
-#         ispec = np.interp(x[~idnan], x[idnan],y[idnan])
-#         y[~idnan] = ispec  
-#     for k, (c,d) in enumerate(zip(cen,wid)):
-#         li = 'l' + str(k) + '_'
-#         if d < 100:
-#             d = 100
-#         #imax = int(icen[k])
-#         #imax = searchtop(x,y,c)
-#         #a = y[imax]
-#         #c = x[imax]
-#         a = amps[k] - comps['q_'][imax]
-#         a *= np.sqrt(2*np.pi) * d/2.355
-#         params[li + 'center'].set(c, min=c-d, max=c+d)
-#         params[li + 'amplitude'].set(a)
-#         params[li + 'sigma'].set(d)
-#         params[li + 'fraction'].set(0.0, vary=True) # now Voigt
-#             
-#     result = model.fit(y, params, x=x, method='leastsq')
-# =============================================================================
+
     centers = []
     fwhms = []
     amplitudes = []
+    cerrors = []
+    fractions = []
     for k in range(len(cen)):
         li = 'l' + str(k) + '_'
         centers.append(result.params[li+'center'].value + gmedian)
+        cerrors.append(result.params[li+'center'].stderr)
         fwhms.append(result.params[li+'fwhm'].value)
         amplitudes.append(result.params[li+'amplitude'].value)
+        fractions.append(result.params[li+'fraction'].value)
         
-    return j, centers, fwhms, amplitudes, result.best_fit+continuum
+    # Save also fractions and use them as starting point !
+    return j, centers, cerrors, fwhms, amplitudes, fractions, result.best_fit+continuum
     
 
-def fitData(datafile, plot=True):
+def fitData(datafile, plot=True, multi=True):
     """
     Fit data from a reduced file using lines from the database
 
@@ -418,13 +381,13 @@ def fitData(datafile, plot=True):
     path0, file0 = os.path.split(__file__)
     linedata = os.path.join(path0, 'data', 'water'+detchan+str(order)+'.csv')
     lines = pd.read_csv(linedata, delimiter=',',header=0,
-                    names=['wave','fwhm_air','fwhm_h2o','good'])
+                    names=['wave','fwhm_air','fwhm_h2o','good','fwhm_isu'])
 
     #wcommon, wrange = wlimits(w)
     # Lines in the range
     wlines = lines.wave.values
     good = lines.good.values
-    fwhms  = lines.fwhm_h2o.values
+    fwhms  = lines.fwhm_isu.values
     #idx =  (wrange[0] < wlines) & (wlines < wrange[1])
     
     #idxcommon = (wcommon[0] < wlines) & (wlines < wcommon[1])
@@ -450,7 +413,7 @@ def fitData(datafile, plot=True):
                 print('Beginning of plots')
     
             # Save fitted data in csv file
-            outformat = '\n{0:d},{1:d},{2:.4f},{3:.1f},{4:.1f},{5:.4f},{6:d}'
+            outformat = '\n{0:d},{1:d},{2:.4f},{3:.1f},{4:.1f},{5:.1f},{6:.4f},{7:.4f},{8:d}'
             gmin = np.nanmin(g)
             gmax = np.nanmax(g)
             
@@ -460,7 +423,7 @@ def fitData(datafile, plot=True):
                 else:
                     print('.', end='')
                 wcommon, wrange = wlimits(w, i)
-                idx = (wlines > wrange[0]) & (wlines < wrange[1])
+                idx = (wlines > wrange[0]-0.5) & (wlines < wrange[1]+0.5)
                 nidx = np.sum(idx)
                 # Skip if no lines are present
                 if nidx > 0:
@@ -468,13 +431,21 @@ def fitData(datafile, plot=True):
                     wgood = good[idx]
                     fwhm = fwhms[idx]
                     # Comment: the dead pixels should be skipped !
-                    linefit = [delayed(fitLines)(wpos, fwhm, g, w, specs, i, j) for j in range(25)]        
-                    linesfit = compute(* linefit, scheduler='processes')
+                    # Comment: to make it faster, we could pass all the 25x16 pixels ? 
+                    # In this case we have to postpone the plots, maybe it would be much more efficient..
+                    # print('FWHM ', fwhm)
+                    if multi == True:
+                        linefit = [delayed(fitLines)(wpos, fwhm, g, w, specs, i, j) for j in range(25)]        
+                        linesfit = compute(* linefit, scheduler='processes')
+                    else:
+                        linesfit = []
+                        for j in range(25):
+                            lfit = fitLines(wpos, fwhm, g, w, specs, i, j)
+                            linesfit.append(lfit)          
                     # Unravel and plot/save
                     fig,axs = plt.subplots(5,5, figsize=(13,13),sharex=True,sharey=True)
                     for lfit in linesfit:
-                        j, centers, ofwhms, amplitudes, bestfit = lfit
-                        #print('i, j' ,i,j, errors)
+                        j, centers, errors, ofwhms, amplitudes, fractions, bestfit = lfit
                         ax = axs[j//5][j%5]
                         ax.plot(g, specs[:,i,j], '.')
                         for c in centers:
@@ -484,12 +455,12 @@ def fitData(datafile, plot=True):
                         ax.grid()
                         ax.text(0.7,0.7,'['+str(i)+','+str(j)+']', transform=ax.transAxes)
                         # Save this for later to avoid excessive garbage collection
-                        for wp, gp, gf, ga, wg, fw in zip(wpos, centers, ofwhms, amplitudes, wgood, fwhm):
+                        for wp, gp, ge, gf, ga, wg, fr in zip(wpos, centers, errors, ofwhms, amplitudes, wgood, fractions):
                             # Write a line if inside the limits by at least one sigma
-                            if (gf is not None):
+                            if (ge is not None):
                                 if (gp > gmin+gf) & (gp < gmax-gf) & (ga > 0):
                                     ax.axvline(gp, linestyle=':', color='skyblue')
-                                    outfile.write(outformat.format(j,i, wp,gp,gf,ga,int(wg)))
+                                    outfile.write(outformat.format(j,i, wp,gp,ge,gf,ga,fr,int(wg)))
         
                     plt.subplots_adjust(wspace=0, hspace=0)
                     # Plot or save to a pdf file
@@ -530,16 +501,16 @@ def gratingModel1(p, gratpos, pixel, data):
     # Parameters
     g, ISOFF, gamma = p['g'], p['ISOFF'], p['gamma']
     PS, QOFF, QS = p['PS'], p['QOFF'], p['QS']
-    order = 1
+    pix = pixel + 1
     
     # Model (Add one to pixel, since they are counted 1,16)
     phi = 2. * np.pi * (gratpos + ISOFF) / 2.0 ** 24
-    sign = np.sign(pixel + 1 - QOFF)
-    delta = PS  * (pixel + 1 - 8.5) + sign * QS * (pixel + 1 - QOFF) ** 2
-    #delta = PS  * (pixel + 1 - 8.5) + QS * (pixel + 1 - QOFF) ** 3
+    sign = np.sign(pix - QOFF)
+    delta = PS  * (pix - 8.5) + sign * QS * (pix - QOFF)**2
+    #delta = PS  * (pixel + 1 - 8.5) + QS * (pix - QOFF) ** 3
     alpha = phi + gamma + delta
     beta = phi - gamma
-    model = 1000. * g / order * (np.sin(alpha) + np.sin(beta))
+    model = 1000. * g * (np.sin(alpha) + np.sin(beta))
     
     return model - data
 
@@ -720,14 +691,16 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
             g_est = g0 * np.cos(np.arctan2(slitPos - NP, a)) 
             if fixg is None:
                 fit_params.add('g', value=0.11765)
+                #fit_params.add('g', value=g_est)
             else:
                 fit_params.add('g', value=fixg[j], vary=False)
             if fixISOFF is None:
-                fit_params.add('ISOFF', value=1150258)
+                fit_params.add('ISOFF', value=1150258.0)
             else:
                 fit_params.add('ISOFF', value=fixISOFF[j], vary=False)
             if fixgamma == False:
-                fit_params.add('gamma', value=0.0167200, min=0) # 0.0185828
+                #fit_params.add('gamma', value=0.0167200, min=0)#min=0.0160,max=0.0170) # 0.0185828
+                fit_params.add('gamma', value=0.0167200, min=0.016, max=0.017)#min=0.0160,max=0.0170) # 0.0185828
             else:
                 fit_params.add('gamma', value=fixgamma, vary=False)
             #fit_params.add('QOFF', value=6.150454)
@@ -750,14 +723,16 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
             g_est = g0 * np.cos(np.arctan2(slitPos - NP, a))
             if fixg is None:
                 fit_params.add('g', value=0.083333)
+                #fit_params.add('g', value=g_est)
             else:
                 fit_params.add('g', value=fixg[j], vary=False)
             if fixISOFF is None:
-                fit_params.add('ISOFF', value=1075019)
+                fit_params.add('ISOFF', value=1075019.0)
             else:
                 fit_params.add('ISOFF', value=fixISOFF[j], vary=False)
             if fixgamma == False:
-                fit_params.add('gamma', value=0.0089008, min=0) # 0.011126
+                #fit_params.add('gamma', value=0.0089008, min=0)#min=0.0088,max=0.0090) # 0.011126
+                fit_params.add('gamma', value=0.0089008, min=0.008, max=0.01)#min=0.0088,max=0.0090) # 0.011126
             else:
                 fit_params.add('gamma', value=fixgamma, vary=False)
             if fixPS == False:            
@@ -814,3 +789,47 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
     QS = np.array(QS)
     
     return g,gamma,QOFF, PS,QS, ISOFF
+
+def computeWavelength(spexel, spaxel, order, coeffs, gratpos):
+    """
+    Computes the wavelength from a set of coefficients
+
+    Parameters
+    ----------
+    spexel : TYPE
+        DESCRIPTION. spectral pixel
+    spaxel : TYPE
+        DESCRIPTION. spatial module
+    order : TYPE
+        DESCRIPTION. spectral order
+    coeffs : TYPE
+        DESCRIPTION. g0,NP,a,ISF,gamma,PS,QOFF,QS,ISOFF 
+    gratpos : TYPE
+        DESCRIPTION. grating position
+
+    Returns
+    -------
+    w : TYPE
+        DESCRIPTION. wavelength
+    dw : TYPE
+        DESCRIPTION. wavelength interval
+
+    """
+    import numpy as np
+    
+    g0,NP,a,ISF,gamma,PS,QOFF,QS,ISOFF = coeffs
+    pix = spexel + 1.
+    module = spaxel
+    phi = 2. * np.pi * ISF * (gratpos + ISOFF[module]) / 2.0 ** 24
+    sign = np.sign(pix - QOFF)
+    delta = (pix - 8.5) * PS + sign * (pix - QOFF) ** 2 * QS
+    slitPos = 25 - 6 * (module // 5) + module % 5
+    # g = g0 * np.cos(np.arctan2(slitPos - NP, a)) 
+    
+    g = g0 * (1 - 0.5 * ((slitPos - NP)/a)**2)
+    
+    w = 1000. * (g / order) * (np.sin(phi + gamma + delta) + np.sin(phi - gamma))
+    dw = 1000. * (g / order) * (PS + 2. * sign * QS * (pix - QOFF)) * np.cos(phi + gamma + delta)
+
+    return w, dw
+
