@@ -305,7 +305,7 @@ def fitLines(wlines, fwhms, g, w, specs, i, j):
             clow = c - d/2
             chigh = c + d/2
             params[li + 'center'].set(c, min=clow, max=chigh)
-            params[li + 'sigma'].set(d, min=d*0.5, max=d*2)
+            params[li + 'sigma'].set(d, min=d*0.5)
             params[li + 'fraction'].set(0.0, vary=True)
             params[li + 'amplitude'].set(a, min=a*0.5, max=a*3)
         else:
@@ -833,3 +833,235 @@ def computeWavelength(spexel, spaxel, order, coeffs, gratpos):
 
     return w, dw
 
+def selectFiles(rootdir, channel, order, dichroic):
+    """
+    select files to compute the wavelength calibration factors
+
+    Parameters
+    ----------
+    rootdir : TYPE
+        DESCRIPTION.
+    channel : TYPE
+        DESCRIPTION.
+    order : TYPE
+        DESCRIPTION.
+    dichroic : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    modules : TYPE
+        DESCRIPTION.
+    pixel : TYPE
+        DESCRIPTION.
+    wavepos : TYPE
+        DESCRIPTION.
+    gerrpos : TYPE
+        DESCRIPTION.
+    gratpos : TYPE
+        DESCRIPTION.
+    gratamp : TYPE
+        DESCRIPTION.
+    waveok : TYPE
+        DESCRIPTION.
+    nfile : TYPE
+        DESCRIPTION.
+
+    """
+    from glob import glob as gb
+    import pandas as pd
+    import numpy as np
+    import os
+
+    if channel == 'R':
+        infiles = gb(os.path.join(rootdir, channel+'1_'+dichroic+'_*.csv'))
+    else:
+        infiles = gb(os.path.join(rootdir, channel+order+'_*_*.csv'))
+
+    module = []
+    pixel = []
+    wavepos = []
+    gratpos = []
+    gerrpos = []
+    gratfwhm = []
+    gratamp = []
+    waveok = []
+    fractions = []
+    nfile = []
+    print('Number of files ', len(infiles))
+    for nf, infile in enumerate(infiles):  
+        lines = pd.read_csv(infile, delimiter=',',header=0,
+                    names=['module','pixel','wavepos','gratpos', 'gerrpos', 'gratfwhm','gratamp','fractions','ok'])
+        module.extend(lines.module.values)
+        pixel.extend(lines.pixel.values)
+        wavepos.extend(lines.wavepos.values)
+        gratpos.extend(lines.gratpos.values)
+        gerrpos.extend(lines.gerrpos.values)
+        gratfwhm.extend(lines.gratfwhm.values)
+        gratamp.extend(lines.gratamp.values)
+        waveok.extend(lines.ok.values)
+        fractions.extend(lines.fractions.values)
+        nfile.extend([nf]*len(lines.module.values))
+    
+    modules = np.array(module)
+    pixel = np.array(pixel)
+    wavepos = np.array(wavepos)
+    gerrpos = np.array(gerrpos)
+    gratpos = np.array(gratpos)
+    gratfwhm = np.array(gratfwhm)
+    gratamp = np.array(gratamp)
+    fractions = np.array(fractions)
+    waveok = np.array(waveok)
+    nfile = np.array(nfile)
+    
+    return modules, pixel, wavepos, gerrpos, gratpos, gratamp, waveok, nfile
+
+def fitISOFF(ISOFF, channel):
+    """
+    Fit the ISOFF values of each spatial module 
+    to find parameters for the parabola.
+
+    Parameters
+    ----------
+    ISOFF : TYPE
+        DESCRIPTION.
+    channel : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    a : TYPE
+        DESCRIPTION.
+    b : TYPE
+        DESCRIPTION.
+    c : TYPE
+        DESCRIPTION.
+
+    """
+    from lmfit.models import QuadraticModel
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    red = [  -8.20328893,    6.35303121,   15.15850744,   47.13169968,   53.19085482,
+           -87.37379178,  -58.5477522,   -56.42734186,  -30.89791712,  -77.46628125,
+           38.68317738,   53.59124765,   61.66651196,   82.1684345,   -38.09540496,
+           -6.24125859,   35.99663217 ,  43.09176554,   72.24014254 ,-131.23373814,
+           -53.15045713,  -28.70681729 ,  -4.15794671,   20.91594107, -251.65783885]
+
+    blue = [-258.04881172,  -53.44382751 ,   0.9087238 ,   50.50108697 , 425.55698219,
+            -185.70929074,  -33.69497542 , -18.19496335,   26.4389202,   316.63904619,
+            -143.17299604,  -39.18047949 ,  15.21162265 ,   9.6569573 ,  213.22748723,
+            -86.86089338 ,  26.81683061 ,  32.44337077 ,  24.67524844 , 216.62538125,
+            -106.91685921 , -16.26743503 ,   6.44892054,  -13.76693703 , 172.77801033]
+    
+    module = np.arange(25)
+    slitPos = 25 - 6 * (module // 5) + module % 5
+    x = slitPos.copy()
+    y = ISOFF.copy()
+
+    if channel == 'R':
+        y += red
+        pass
+    else:
+        y += blue
+
+    plt.plot(x, y,'o')
+    plt.plot(x, ISOFF, '.')
+    mod = QuadraticModel()
+    pars = mod.guess(y, x=x)
+    out = mod.fit(y, pars, x=x)
+    a,b,c = out.params['a'].value,out.params['b'].value,out.params['c'].value
+    x_=np.arange(0, 30, 0.5)
+    plt.plot(x_, a*x_**2+b*x_+c, color='blue')
+    plt.title('ISOFF')
+
+    # Reject outliers 
+    for k in range(3):
+        res = y - (a*x**2+b*x+c)
+        med = np.nanmedian(res)
+        mad = np.nanmedian(np.abs(res - med))
+        id3 = np.abs(res-med) < 3*mad
+        pars = mod.guess(y[id3], x=x[id3])
+        out = mod.fit(y[id3], pars, x=x[id3])
+        a, b, c = out.params['a'].value,out.params['b'].value,out.params['c'].value
+        x = x[id3]
+        y = y[id3]
+        plt.plot(x,y,'x',color='red')
+        plt.plot(x_, a*x_**2+b*x_+c, color='red')
+        #print(out.params)
+    plt.title('ISOFF')
+    plt.show()
+
+    print('ai = ',a)
+    print('bi = ',b)
+    print('ci = ',c)
+
+    return a, b, c
+
+
+def fitg(g):
+    """
+    Fit values of g computed for every spaxel to a parabola.
+
+    Parameters
+    ----------
+    g : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    from lmfit.models import QuadraticModel
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    module = np.arange(25)
+    slitPos = 25 - 6 * (module // 5) + module % 5
+
+    plt.plot(slitPos, g,'o')
+    x = slitPos.copy()
+    y = g.copy()
+    mod = QuadraticModel()
+    pars = mod.guess(y, x=x)
+    out = mod.fit(y, pars, x=x)
+    a,b,c = out.params['a'].value,out.params['b'].value,out.params['c'].value
+    x_=np.arange(0,30,0.5)
+    plt.plot(x_, a*x_**2+b*x_+c,color='blue')
+    plt.title('g')
+
+    # Reject outliers 
+    for k in range(3):
+        res = y - (a*x**2+b*x+c)
+        med = np.nanmedian(res)
+        mad = np.nanmedian(np.abs(res - med))
+        id3 = np.abs(res-med) < 3*mad
+        pars = mod.guess(y[id3], x=x[id3])
+        out = mod.fit(y[id3], pars, x=x[id3])
+        a,b,c = out.params['a'].value,out.params['b'].value,out.params['c'].value
+        x = x[id3]
+        y = y[id3]
+        plt.plot(x,y,'x',color='red')
+        plt.plot(x_, a*x_**2+b*x_+c, color='red')
+    #print(out.params)
+    plt.title('g')
+    plt.show()
+
+    a = out.params['a'].value
+    b = out.params['b'].value
+    c = out.params['c'].value
+#g = a*slitPos**2 + b*slitPos + c
+#print('central value ', -b/(2*a))
+#print('vertex ', c - b * b/ (4 *a))
+#print('Amplitude ', a)
+    # Sebastian's expression
+    g0 = c - b**2/(4*a)
+    NP = - 0.5 * b / a
+    a_ = np.sqrt(-0.5 * g0/ a)
+    print('g0 = ', g0)
+    print('NP = ', NP)
+    print('a  = ', a_)
+
+    return g0, NP, a_
