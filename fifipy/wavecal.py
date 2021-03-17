@@ -27,12 +27,12 @@ def reduceData(rootdir, names=None):
     if not os.path.exists(rootdir+'Reduced/'):
         os.makedirs(rootdir+'Reduced/')
     
-    if names == None:
+    if names is None:
         names = np.arange(1,50)
     for channel in ['sw','lw']:
         for name in names:
             filenames = '*GC'+str(name)+'-*'+channel+'.fits'
-            files = sorted(gb(os.path.join(rootdir, '**', filenames)))
+            files = sorted(gb(os.path.join(rootdir, '**', filenames), recursive=True))
             if len(files) > 0:
                 # Check sequence of grating positions
                 gratpos = [int(re.search('STRT_B-(.+?)_', file).group(1)) for file in files]

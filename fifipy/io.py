@@ -151,13 +151,18 @@ def readData(fitsfile, subtractZero=True):
                    (alti_sta,alti_end), (wv_sta,wv_end))
             return aor, hk, gratpos, flux
         
-def saveSlopeFits(gpos, dichroic, obsdate, detchan, order, specs, wave, dwave, outname):
+def saveSlopeFits(gpos, dichroic, obsdate, detchan, order, specs, wave, dwave, 
+                  outname, xcoords=None, ycoords=None, kmirr=None, gratpos=None):
     """Save in a FITS file the results of slope fitting and wavelength calibration."""
     hdu = fits.PrimaryHDU()
     hdu.header['CHANNEL'] = detchan
     hdu.header['ORDER'] = order
     hdu.header['DICHROIC'] = dichroic
     hdu.header['OBSDATE'] = obsdate
+    if kmirr is not None:
+        hdu.header['KMIRRPOS'] = kmirr
+    if gratpos is not None:
+        hdu.header['GRATPOS'] = gratpos
     hdu1 = fits.ImageHDU()
     hdu1.data = gpos
     hdu1.header['EXTNAME'] = 'Grating Position'
@@ -170,18 +175,25 @@ def saveSlopeFits(gpos, dichroic, obsdate, detchan, order, specs, wave, dwave, o
     hdu4 = fits.ImageHDU()
     hdu4.data = dwave
     hdu4.header['EXTNAME'] = 'DWAVE'
-    hdul = fits.HDUList([hdu, hdu1, hdu2, hdu3, hdu4])
+    if (xcoords is None) & (ycoords is None):
+        hdul = fits.HDUList([hdu, hdu1, hdu2, hdu3, hdu4])
+    elif (xcoords is not None) & (ycoords is not None):
+        hdu5 = fits.ImageHDU()
+        hdu5.data = xcoords
+        hdu5.header['EXTNAME'] = 'XCOORDS'
+        hdu6 = fits.ImageHDU()
+        hdu6.data = ycoords
+        hdu6.header['EXTNAME'] = 'YCOORDS'
+        hdul = fits.HDUList([hdu, hdu1, hdu2, hdu3, hdu4, hdu5, hdu6])
     hdul.writeto(outname, overwrite=True)
     hdul.close()
     
 def readSlopeFits(path, filename):
-    hdl = fits.open(path+filename)
-    #hdl.info()
-    g = hdl['Grating Position'].data
-    w = hdl['WAVE'].data
-    dw = hdl['DWAVE'].data
-    s = hdl['SPECS'].data
-    hdl.close()
+    with fits.open(path+filename) as hdl:
+        g = hdl['Grating Position'].data
+        w = hdl['WAVE'].data
+        dw = hdl['DWAVE'].data
+        s = hdl['SPECS'].data
     return g, w, dw, s
 
 def saveMediumSpectrum(w, medspec, path, filename):
