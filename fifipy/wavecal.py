@@ -633,7 +633,7 @@ def dGratingModel2(p, gratpos, pixel, data):
 
 
 def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
-                  fixPS=False, fixQS=False, fixQOFF=False, fixgamma=False,
+                  fixPS=False, fixQS=False, fixQOFF=False, fixgamma=True,
                   fixg=None, fixISOFF=None):
     """
     Estimate parameters for wavelength calibration from measurement of grating
@@ -702,7 +702,7 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
                 #fit_params.add('gamma', value=0.0167200, min=0)#min=0.0160,max=0.0170) # 0.0185828
                 fit_params.add('gamma', value=0.0167200, min=0.016, max=0.017)#min=0.0160,max=0.0170) # 0.0185828
             else:
-                fit_params.add('gamma', value=fixgamma, vary=False)
+                fit_params.add('gamma', value=0.0167200, vary=False)
             #fit_params.add('QOFF', value=6.150454)
             if fixPS == False:
                 fit_params.add('PS', value=0.0006)
@@ -734,7 +734,7 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
                 #fit_params.add('gamma', value=0.0089008, min=0)#min=0.0088,max=0.0090) # 0.011126
                 fit_params.add('gamma', value=0.0089008, min=0.008, max=0.01)#min=0.0088,max=0.0090) # 0.011126
             else:
-                fit_params.add('gamma', value=fixgamma, vary=False)
+                fit_params.add('gamma', value=0.0089008, vary=False)
             if fixPS == False:            
                 fit_params.add('PS', value=0.0006)
             else:
