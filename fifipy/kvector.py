@@ -580,10 +580,13 @@ def saveSourcePositions(rootdir, channel, dichroic, kmirr, gpos, xcenters, ycent
 
 def fitSourcePositions(rootdir, channel, dichroic):
     from fifipy.kvector import fitSourcePosition, saveSourcePositions
-    from astropy.io import fits
+    #from astropy.io import fits
     import numpy as np
     from glob import glob as gb
     import os
+    import matplotlib.pyplot as plt
+    from fifipy.stats import biweightLocation
+
     
     # Select files
     filenames = channel+'*_D'+dichroic+'_K*.fits'
@@ -594,24 +597,61 @@ def fitSourcePositions(rootdir, channel, dichroic):
         files = np.array(files)
         kmirr = np.array([int(file.split('_')[2][1:]) for file in files])
         gpos = np.array([int(file.split('_')[3][1:-5]) for file in files])
-        dates = []
-        for f in files:
-            header = fits.getheader(f)
-            dates.append(header['OBSDATE'])
-        dates = np.array(dates)
-        # Sort by date
-        idx = np.argsort(dates)
-        files = files[idx]
-        kmirr = kmirr[idx]
-        gpos = gpos[idx]
+        ugpos = np.unique(gpos)
+        ukmirr = np.unique(kmirr)
+        # Sorting by dates
+        #dates = []
+        #for f in files:
+        #    header = fits.getheader(f)
+        #    dates.append(header['OBSDATE'])
+        #dates = np.array(dates)
+        ## Sort by date
+        #idx = np.argsort(dates)
+        #files = files[idx]
+        #kmirr = kmirr[idx]
+        #gpos = gpos[idx]
         # Compute centers
         xcenters = np.zeros((nfiles, 25))
         ycenters = np.zeros((nfiles, 25))
-        for i, f in enumerate(files):
-            print('File ', f)
-            xcen, ycen = fitSourcePosition(f, plot=False)
-            xcenters[i] = xcen
-            ycenters[i] = ycen
+        rot1 = '{0:.1f}'.format((ukmirr[0] - 52) * 0.0871)
+        rot2 = '{0:.1f}'.format((ukmirr[1] - 52) * 0.0871)
+        # Plot centers
+        nrows = len(ugpos) // 2 + len(ugpos) % 2
+        fig,axes = plt.subplots(nrows, 2,figsize=(12, nrows*6))
+        for i, gp in enumerate(ugpos):
+            print(str(gp)+' ', end='')
+            ax = axes[i // 2, i % 2]
+            idx1 = (gpos == gp) & (kmirr == ukmirr[0])
+            idx2 = (gpos == gp) & (kmirr == ukmirr[1])
+            xc1, yc1 = fitSourcePosition(files[idx1][0], plot=False)
+            xc2, yc2 = fitSourcePosition(files[idx2][0], plot=False)
+            xcenters[idx1] = xc1
+            ycenters[idx1] = yc1
+            xcenters[idx2] = xc2
+            ycenters[idx2] = yc2
+            if channel == 'R':
+                pixlist = np.array([12,13,14])
+            else:
+                pixlist = np.array([7,8,9,12,13,14,17,18,19])
+            for pix in pixlist: 
+                ax.plot([xc1[pix-1], xc2[pix-1]], [yc1[pix-1], yc2[pix-1]],
+                        label=str(pix),ls=':')
+            ax.plot(xc1, yc1, 'o', color='green',label='KM '+rot1)
+            ax.plot(xc2, yc2, 'o', color='red',label='KM '+rot2)
+            x0 = biweightLocation(0.5*(xc1[pixlist-1]+xc2[pixlist-1]))
+            y0 = biweightLocation(0.5*(yc1[pixlist-1]+yc2[pixlist-1])) 
+            dx = xc1[12]-x0
+            dy = yc1[12]-y0
+            ax.arrow(x0,y0,dx,dy,color='black',lw=2)
+            ax.set_title('Grating position: '+str(gp))
+            ax.legend()
+        plt.show()
+            
+        #for i, f in enumerate(files):
+        #    print('File ', f)
+        #    xcen, ycen = fitSourcePosition(f, plot=False)
+        #    xcenters[i] = xcen
+        #    ycenters[i] = ycen
         # Save result
         saveSourcePositions(rootdir, channel, dichroic, kmirr, gpos, xcenters, ycenters)           
         
@@ -646,6 +686,8 @@ def computeDeltaVector(infile):
 
     alphak = (kmir[0] - 52) * 0.0871
 
+    print('K-mirror rotation')
+    print('command measure')
     for i in range(ng):
         id1 = (kmirror == kmir[0]) & (grating == grat[i])
         id2 = (kmirror == kmir[1]) & (grating == grat[i])
@@ -662,7 +704,7 @@ def computeDeltaVector(infile):
         dx = x1[12] - x0[i]
         dy = y1[12] - y0[i]
         #alpha[i] = - alphak - np.arctan2(dy, dx) * 180/np.pi
-        print(alphak, rotation_achieved)
+        print('{0:.3f} {1:.3f}'.format(alphak, rotation_achieved))
         alpha[i] = -rotation_achieved - np.arctan2(dy, dx) * 180/np.pi
         r[i] = np.sqrt((x1[12] - x0[i])**2+ (y1[12] - y0[i])**2)
 
@@ -769,15 +811,15 @@ def computeDeltaVector(infile):
         gp = 1195000
     Rx = (ax * gp + bx)*0.842
     Ry = - (ay * gp + by) * 0.842
-    print('ax {0:.4e} +/- {1:.4e}  bx {2:.4e} +/- {3:.4e}'.format(ax,sax,bx,sbx))
-    print('ay {0:.4e} +/- {1:.4e}  by {2:.4e} +/- {3:.4e}'.format(ay,say,by,sby))
+    print(u'ax {0:.4e} \u00b1 {1:.4e}  bx {2:.4e} \u00b1 {3:.4e}'.format(ax,sax,bx,sbx))
+    print(u'ay {0:.4e} \u00b1 {1:.4e}  by {2:.4e} \u00b1 {3:.4e}'.format(ay,say,by,sby))
 
     if channel == 'R':
         oformat = '99999999  r  '+dichroic
     else:
         oformat = '99999999  b  '+dichroic
-    oformat += '{0:13.4e} {1:13.4e}  {2:5.2f}    {3:13.4e} {4:13.4e}  {5:5.2f}'
-
-    print(' Date    ch dich   b_x        a_x           Rx_cx(U) b_y         a_y        Rx_cy(V) ')
+    oformat += '  {0:11.4e} {1:11.4e}  {2:5.2f}    {3:11.4e} {4:11.4e}  {5:5.2f}'
+    print('')
+    print(' Date    ch dich   b_x        a_x           Rx_cx(U)       b_y         a_y        Rx_cy(V) ')
     print(oformat.format(bx,ax,Rx,by,ay,Ry))
     return oformat.format(bx,ax,Rx,by,ay,Ry)
