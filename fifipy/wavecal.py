@@ -1065,3 +1065,43 @@ def fitg(g):
     print('a  = ', a_)
 
     return g0, NP, a_
+
+def plotLines(rootdir, channel, order,i=8,j=12):
+    import matplotlib.pyplot as plt
+    from astropy.io import fits
+    from glob import glob as gb
+    import os
+    from matplotlib.ticker import ScalarFormatter
+    import numpy as np
+    order = str(order)
+    filenames = channel+order+'*.fits'
+    files = sorted(gb(os.path.join(rootdir, 'Reduced', filenames)))
+    fig,ax = plt.subplots(figsize=(18,6))
+    wmin = 200
+    wmax = 0
+    for file in files:
+        with fits.open(file) as hdl:
+            g = hdl['Grating Position'].data
+            specs = hdl['SPECS'].data
+            w = hdl['WAVE'].data
+            header = hdl[0].header
+            if np.nanmin(w) < wmin:
+                wmin = np.nanmin(w)
+            if np.nanmax(w) > wmax:
+                wmax = np.nanmax(w)
+            dichroic = header['DICHROIC']
+            if dichroic == 130:
+                ax.plot(g, specs[:,i,j], color='red')
+            else:
+                ax.plot(g, specs[:,i,j], color='blue')
+    #ax.set_ylim(0,12)
+    ax.set_ylim(ymin=0)
+    wax = ax.twiny()
+    wax.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+    ax.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+    wax.set_xlim(wmin, wmax)
+    wax.set_xlabel("Wavelength [$\mu$m]")
+    ax.set_xlabel("Grating position [ISU]")
+    ax.grid()
+    ax.set_title(channel+' '+order)
+    plt.show()    
