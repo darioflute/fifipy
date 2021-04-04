@@ -757,29 +757,37 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
         else:
             idx = module == j
         
-        if order == 1:
-            min1 = Minimizer(gratingModel1, fit_params, 
-                             fcn_args=(gratpos[idx], pixel[idx]), 
-                             fcn_kws={'data':  wavepos[idx]})
-            out = min1.leastsq(Dfun=dGratingModel1, col_deriv=True)
-            #out = minimize(gratingModel1, fit_params, 
-            #           args=(gratpos[idx], pixel[idx]), kws=kws, method='leastsq')
+        if np.sum(idx) > 6:
+            if order == 1:
+                min1 = Minimizer(gratingModel1, fit_params, 
+                                 fcn_args=(gratpos[idx], pixel[idx]), 
+                                 fcn_kws={'data': wavepos[idx]})
+                out = min1.leastsq(Dfun=dGratingModel1, col_deriv=True)
+                #out = minimize(gratingModel1, fit_params, 
+                #           args=(gratpos[idx], pixel[idx]), kws=kws, method='leastsq')
+            else:
+                #kws = {'data': wavepos[idx]}
+                #out = minimize(gratingModel2, fit_params, 
+                #           args=(gratpos[idx], pixel[idx]), kws=kws, method='leastsq')
+                min2 = Minimizer(gratingModel2, fit_params, 
+                                 fcn_args=(gratpos[idx], pixel[idx]), 
+                                 fcn_kws={'data': wavepos[idx]})
+                out = min2.leastsq(Dfun=dGratingModel2, col_deriv=True)
+           
+            outpar = out.params
+            g.append(outpar['g'].value)
+            gamma.append(outpar['gamma'].value)
+            QOFF.append(outpar['QOFF'].value)
+            PS.append(outpar['PS'].value)
+            QS.append(outpar['QS'].value)
+            ISOFF.append(outpar['ISOFF'].value)
         else:
-            #kws = {'data': wavepos[idx]}
-            #out = minimize(gratingModel2, fit_params, 
-            #           args=(gratpos[idx], pixel[idx]), kws=kws, method='leastsq')
-            min2 = Minimizer(gratingModel2, fit_params, 
-                             fcn_args=(gratpos[idx], pixel[idx]), 
-                             fcn_kws={'data':  wavepos[idx]})
-            out = min2.leastsq(Dfun=dGratingModel2, col_deriv=True)
-       
-        outpar = out.params
-        g.append(outpar['g'].value)
-        gamma.append(outpar['gamma'].value)
-        QOFF.append(outpar['QOFF'].value)
-        PS.append(outpar['PS'].value)
-        QS.append(outpar['QS'].value)
-        ISOFF.append(outpar['ISOFF'].value)
+            g.append(np.nan)
+            gamma.append(np.nan)
+            QOFF.append(np.nan)
+            PS.append(np.nan)
+            QS.append(np.nan)
+            ISOFF.append(np.nan)
     
     g = np.array(g)
     gamma = np.array(gamma)
@@ -876,7 +884,7 @@ def selectFiles(rootdir, channel, order, dichroic):
     if channel == 'R':
         infiles = gb(os.path.join(rootdir, channel+'1_'+dichroic+'_*.csv'))
     else:
-        infiles = gb(os.path.join(rootdir, channel+order+'_*_*.csv'))
+        infiles = gb(os.path.join(rootdir, channel+str(order)+'_*_*.csv'))
 
     module = []
     pixel = []
@@ -916,7 +924,7 @@ def selectFiles(rootdir, channel, order, dichroic):
     
     return modules, pixel, wavepos, gerrpos, gratpos, gratamp, waveok, nfile
 
-def fitISOFF(ISOFF, channel):
+def fitISOFF(ISOFF, channel, dichroic, order):
     """
     Fit the ISOFF values of each spatial module 
     to find parameters for the parabola.
@@ -942,6 +950,8 @@ def fitISOFF(ISOFF, channel):
     import numpy as np
     import matplotlib.pyplot as plt
     
+    
+    
     red = [  -8.20328893,    6.35303121,   15.15850744,   47.13169968,   53.19085482,
            -87.37379178,  -58.5477522,   -56.42734186,  -30.89791712,  -77.46628125,
            38.68317738,   53.59124765,   61.66651196,   82.1684345,   -38.09540496,
@@ -954,22 +964,56 @@ def fitISOFF(ISOFF, channel):
             -86.86089338 ,  26.81683061 ,  32.44337077 ,  24.67524844 , 216.62538125,
             -106.91685921 , -16.26743503 ,   6.44892054,  -13.76693703 , 172.77801033]
     
+    
+    red105 = [ -7.82734595,    6.48103643,   15.37344189,   47.39558183,   54.25017651,
+              -87.78073561,  -57.87672198,  -57.02387395,  -30.75647953,  -82.13171852,
+               38.17407445,   53.9293801 ,   62.15816713,   82.60265586,  -51.04419029,
+               -6.0626937,   36.28682384,   42.49162215,   70.33355788, -148.78530207,
+              -52.04256692 , -29.12922045,   -4.73520485,   20.72545992, -268.51481606]
+    
+    red130 = [ -12.70859072,    7.50024661,   18.53167461,   41.46400465,   52.7757175,
+              -95.78015715,  -56.53938436,  -54.24399594,  -33.75992799,  -68.99733959,
+               31.27967525,   53.60554151,   58.10103624,   71.69960587,  -22.11761283,
+               -4.64846212 ,  38.77585613,   42.34325365,   60.40053434, -118.02749666,
+              -47.8753654 ,  -24.45939546,   -4.54977914,    8.74871326, -223.38722927]
+    
+    blue1 = [-263.92944121,  -53.59084654,    1.16697799,   51.19513828,  422.65026353,
+             -189.63033763,  -33.17725668,  -19.96267952,   26.01302266,  307.31828786,
+             -156.31979898,  -37.76920495,   14.25657713,    9.02851029,  216.42404114,
+              -75.57154681,   28.56399698,   33.54483603,   24.91445915,  215.17805003,
+             -108.48468372,  -12.59286879,    6.90170244,  -10.74710888,  175.93175233]
+    
+    blue2 = [-1.80111492e+02, -4.09611668e+01,  1.78797557e-02,  5.33911505e+01,
+              4.51898768e+02, -1.28648267e+02, -3.41402874e+01, -2.58367960e+01,
+              1.51806221e+01,  3.40600043e+02, -1.00297089e+02, -2.52445624e+01,
+              4.35994998e+00,  3.34233424e+00,  2.48134145e+02, -3.43214702e+01,
+              2.64531668e+01,  2.99021981e+01,  4.11197888e+01,  2.59380351e+02,
+             -6.88399816e+01, -1.68668733e-01,  1.23190431e+01,  3.38400050e+00,
+              2.28956503e+02]
+    
     module = np.arange(25)
     slitPos = 25 - 6 * (module // 5) + module % 5
     x = slitPos.copy()
     y = ISOFF.copy()
 
     if channel == 'R':
-        y += red
+        if dichroic == '105':
+            y += red105
+        else:
+            y += red130
         pass
     else:
-        y += blue
+        if order == 1:
+            y += blue1
+        else:
+            y += blue2
 
     plt.plot(x, y,'o')
     plt.plot(x, ISOFF, '.')
     mod = QuadraticModel()
-    pars = mod.guess(y, x=x)
-    out = mod.fit(y, pars, x=x)
+    idx = np.isfinite(y)
+    pars = mod.guess(y[idx], x=x[idx])
+    out = mod.fit(y[idx], pars, x=x[idx])
     a,b,c = out.params['a'].value,out.params['b'].value,out.params['c'].value
     x_=np.arange(0, 30, 0.5)
     plt.plot(x_, a*x_**2+b*x_+c, color='blue')
@@ -1025,8 +1069,9 @@ def fitg(g):
     x = slitPos.copy()
     y = g.copy()
     mod = QuadraticModel()
-    pars = mod.guess(y, x=x)
-    out = mod.fit(y, pars, x=x)
+    idx = np.isfinite(y)
+    pars = mod.guess(y[idx], x=x[idx])
+    out = mod.fit(y[idx], pars, x=x[idx])
     a,b,c = out.params['a'].value,out.params['b'].value,out.params['c'].value
     x_=np.arange(0,30,0.5)
     plt.plot(x_, a*x_**2+b*x_+c,color='blue')
@@ -1071,37 +1116,200 @@ def plotLines(rootdir, channel, order,i=8,j=12):
     from astropy.io import fits
     from glob import glob as gb
     import os
+    import re 
     from matplotlib.ticker import ScalarFormatter
     import numpy as np
     order = str(order)
     filenames = channel+order+'*.fits'
     files = sorted(gb(os.path.join(rootdir, 'Reduced', filenames)))
-    fig,ax = plt.subplots(figsize=(18,6))
-    wmin = 200
-    wmax = 0
-    for file in files:
-        with fits.open(file) as hdl:
-            g = hdl['Grating Position'].data
-            specs = hdl['SPECS'].data
-            w = hdl['WAVE'].data
-            header = hdl[0].header
-            if np.nanmin(w) < wmin:
-                wmin = np.nanmin(w)
-            if np.nanmax(w) > wmax:
-                wmax = np.nanmax(w)
-            dichroic = header['DICHROIC']
-            if dichroic == 130:
-                ax.plot(g, specs[:,i,j], color='red')
-            else:
-                ax.plot(g, specs[:,i,j], color='blue')
-    #ax.set_ylim(0,12)
-    ax.set_ylim(ymin=0)
-    wax = ax.twiny()
-    wax.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
-    ax.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
-    wax.set_xlim(wmin, wmax)
-    wax.set_xlabel("Wavelength [$\mu$m]")
-    ax.set_xlabel("Grating position [ISU]")
-    ax.grid()
-    ax.set_title(channel+' '+order)
+    # Split in two plots if R
+    if channel == 'B':
+        fig,ax = plt.subplots(figsize=(18,6))
+        wmin, wmax = 200, 0
+        for file in files:
+            with fits.open(file) as hdl:
+                gc = re.findall(r'GC(\d+_\d)', file)[0]
+                g = hdl['Grating Position'].data
+                specs = hdl['SPECS'].data
+                w = hdl['WAVE'].data
+                header = hdl[0].header
+                if np.nanmin(w) < wmin:
+                    wmin = np.nanmin(w)
+                if np.nanmax(w) > wmax:
+                    wmax = np.nanmax(w)
+                dichroic = header['DICHROIC']
+                if dichroic == 130:
+                    ax.plot(g, specs[:,i,j], linestyle='-', label=gc)
+                else:
+                    ax.plot(g, specs[:,i,j], linestyle='--', label=gc)
+        #ax.set_ylim(0,12)
+        ax.set_ylim(ymin=0)
+        wax = ax.twiny()
+        wax.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+        ax.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+        wax.set_xlim(wmin, wmax)
+        wax.set_xlabel("Wavelength [$\mu$m]")
+        ax.set_xlabel("Grating position [ISU]")
+        ax.grid()
+        ax.legend()
+        ax.set_title(channel+' '+order)
+    else:
+        fig, ax = plt.subplots(nrows=4,figsize=(18,24))
+        wmin1, wmax1 = 200, 0
+        wmin2, wmax2 = 200, 0
+        wmin3, wmax3 = 200, 0
+        wmin4, wmax4 = 200, 0
+        ax = np.array(ax)
+        for file in files:
+            with fits.open(file) as hdl:
+                gc = re.findall(r'GC(\d+_\d)', file)[0]
+                g = hdl['Grating Position'].data
+                specs = hdl['SPECS'].data
+                w = hdl['WAVE'].data
+                header = hdl[0].header
+                dichroic = header['DICHROIC']
+                wmin, wmax = np.nanmin(w), np.nanmax(w)
+                if wmax < 130:
+                    idplot = 0
+                elif (wmin > 125) & (wmax < 145):
+                    idplot = 1
+                elif (wmin > 140) & (wmax < 155):
+                    idplot = 2
+                else:
+                    idplot = 3   
+                if idplot == 0:
+                    if wmin < wmin1:
+                        wmin1 = wmin
+                    if wmax > wmax1:
+                        wmax1 = wmax
+                elif idplot == 1:
+                    if wmin < wmin2:
+                        wmin2 = wmin
+                    if wmax > wmax2:
+                        wmax2 = wmax
+                elif idplot == 2:
+                    if wmin < wmin3:
+                        wmin3 = wmin
+                    if wmax > wmax3:
+                        wmax3 = wmax
+                else:
+                    if wmin < wmin4:
+                        wmin4 = wmin
+                    if wmax > wmax4:
+                        wmax4 = wmax
+                if dichroic == 130:
+                    ax[idplot].plot(g, specs[:,i,j], linestyle='-', label=gc)
+                else:
+                    ax[idplot].plot(g, specs[:,i,j], linestyle='--', label=gc)
+
+        wax1 = ax[0].twiny()
+        wax1.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+        wax1.set_xlim(wmin1, wmax1)
+        wax1.set_xlabel("Wavelength [$\mu$m]")
+        wax2 = ax[1].twiny()
+        wax2.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+        wax2.set_xlim(wmin2, wmax2)
+        wax2.set_xlabel("Wavelength [$\mu$m]")
+        wax3 = ax[2].twiny()
+        wax3.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+        wax3.set_xlim(wmin3, wmax3)
+        wax3.set_xlabel("Wavelength [$\mu$m]")
+        wax4 = ax[3].twiny()
+        wax4.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+        wax4.set_xlim(wmin4, wmax4)
+        wax4.set_xlabel("Wavelength [$\mu$m]")
+        for i in [0,1,2,3]:
+            ax[i].set_ylim(ymin=0)
+            ax[i].xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+            ax[i].set_xlabel("Grating position [ISU]")
+            ax[i].grid()
+            ax[i].legend()
+            ax[i].set_title(channel+' '+order)
     plt.show()    
+
+
+def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, QS, QOFF):
+    import matplotlib.pyplot as plt
+    from fifipy.wavecal import computeWavelength
+    from fifipy.spectra import getResolution
+    import numpy as np
+    from fifipy.wavecal import selectFiles
+        
+    if channelorder == 'R':
+        channel = 'R'
+        order = 1
+    elif channelorder == 'B1':
+        channel = 'B'
+        order = 1
+    elif channelorder == 'B2':
+        channel = 'B'
+        order = 2
+    else:
+        print(channelorder ,' is an invalid channelorder')
+        return
+    
+    modules, pixel, wavepos, gerrpos, gratpos, gratamp, waveok, nfile = selectFiles(rootdir,channel,order,dichroic)
+    module = np.arange(25)
+    slitPos = 25 - 6 * (module // 5) + module % 5
+    red105 = [ -7.82734595,    6.48103643,   15.37344189,   47.39558183,   54.25017651,
+              -87.78073561,  -57.87672198,  -57.02387395,  -30.75647953,  -82.13171852,
+               38.17407445,   53.9293801 ,   62.15816713,   82.60265586,  -51.04419029,
+               -6.0626937,   36.28682384,   42.49162215,   70.33355788, -148.78530207,
+              -52.04256692 , -29.12922045,   -4.73520485,   20.72545992, -268.51481606]
+    
+    red130 = [ -12.70859072,    7.50024661,   18.53167461,   41.46400465,   52.7757175,
+              -95.78015715,  -56.53938436,  -54.24399594,  -33.75992799,  -68.99733959,
+               31.27967525,   53.60554151,   58.10103624,   71.69960587,  -22.11761283,
+               -4.64846212 ,  38.77585613,   42.34325365,   60.40053434, -118.02749666,
+              -47.8753654 ,  -24.45939546,   -4.54977914,    8.74871326, -223.38722927]
+    
+    blue1 = [-263.92944121,  -53.59084654,    1.16697799,   51.19513828,  422.65026353,
+             -189.63033763,  -33.17725668,  -19.96267952,   26.01302266,  307.31828786,
+             -156.31979898,  -37.76920495,   14.25657713,    9.02851029,  216.42404114,
+              -75.57154681,   28.56399698,   33.54483603,   24.91445915,  215.17805003,
+             -108.48468372,  -12.59286879,    6.90170244,  -10.74710888,  175.93175233]
+    
+    blue2 = [-1.80111492e+02, -4.09611668e+01,  1.78797557e-02,  5.33911505e+01,
+              4.51898768e+02, -1.28648267e+02, -3.41402874e+01, -2.58367960e+01,
+              1.51806221e+01,  3.40600043e+02, -1.00297089e+02, -2.52445624e+01,
+              4.35994998e+00,  3.34233424e+00,  2.48134145e+02, -3.43214702e+01,
+              2.64531668e+01,  2.99021981e+01,  4.11197888e+01,  2.59380351e+02,
+             -6.88399816e+01, -1.68668733e-01,  1.23190431e+01,  3.38400050e+00,
+              2.28956503e+02]
+    if channelorder == 'B1':
+        ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue1
+    elif channelorder == 'B2':
+        ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue2
+    elif channelorder == 'R':
+        if dichroic == '105':
+            ISOFF = ai*slitPos**2 + bi*slitPos + ci - red105
+        else:
+            ISOFF = ai*slitPos**2 + bi*slitPos + ci - red130
+           
+    if channelorder == 'R':
+        gamma = 0.0167200
+    else:
+        gamma = 0.0089008
+
+    ISF=1
+    coeffs = [g0,NP,a,ISF,gamma,PS,QOFF,QS,ISOFF ]
+    
+    w_est = []
+    dw_est = []
+    resol = []
+    idx = (gratamp > 100) & (gerrpos < 100) & (waveok ==1)
+    for pix, mo, gp, wp in zip(pixel[idx], modules[idx], gratpos[idx], wavepos[idx]):
+        w,dw = computeWavelength(pix, mo, order, coeffs, gp)
+        resol.append(getResolution(channelorder, wp))
+        w_est.append(w)
+        dw_est.append(dw)
+    w_est = np.array(w_est)
+    R = np.array(resol)
+    
+    
+    fig,ax = plt.subplots(figsize=(14,6))
+    plt.plot(wavepos[idx],(w_est-wavepos[idx])/(wavepos[idx]/R),'.')
+    plt.ylabel ( '$(1 - \lambda_{est}/\lambda )R$')
+    plt.ylim(-0.3,0.3)
+    plt.grid()
+    plt.show()
