@@ -1228,7 +1228,7 @@ def plotLines(rootdir, channel, order,i=8,j=12):
     plt.show()    
 
 
-def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, QS, QOFF):
+def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, QS, QOFF, comparison=None):
     import matplotlib.pyplot as plt
     from fifipy.wavecal import computeWavelength
     from fifipy.spectra import getResolution
@@ -1292,23 +1292,34 @@ def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, Q
         gamma = 0.0089008
 
     ISF=1
-    coeffs = [g0,NP,a,ISF,gamma,PS,QOFF,QS,ISOFF ]
+    coeffs = [g0, NP, a, ISF, gamma, PS, QOFF, QS, ISOFF]
     
     w_est = []
-    dw_est = []
     resol = []
     idx = (gratamp > 100) & (gerrpos < 100) & (waveok ==1)
     for pix, mo, gp, wp in zip(pixel[idx], modules[idx], gratpos[idx], wavepos[idx]):
         w,dw = computeWavelength(pix, mo, order, coeffs, gp)
         resol.append(getResolution(channelorder, wp))
         w_est.append(w)
-        dw_est.append(dw)
     w_est = np.array(w_est)
     R = np.array(resol)
     
-    
     fig,ax = plt.subplots(figsize=(14,6))
     plt.plot(wavepos[idx],(w_est-wavepos[idx])/(wavepos[idx]/R),'.')
+
+    if comparison is not None:
+        w_comp = []
+        idx = (gratamp > 100) & (gerrpos < 100) & (waveok ==1)
+        resol = []
+        for pix, mo, gp, wp in zip(pixel[idx], modules[idx], gratpos[idx], wavepos[idx]):
+            w,dw = computeWavelength(pix, mo, order, comparison, gp)
+            resol.append(getResolution(channelorder, wp))
+            w_comp.append(w)
+        w_comp = np.array(w_comp)
+        R = np.array(resol)
+        plt.plot(wavepos[idx]+0.35, (w_comp-wavepos[idx])/(wavepos[idx]/R),'.',label='comp')
+        plt.legend()
+
     plt.ylabel ( '$(1 - \lambda_{est}/\lambda )R$')
     plt.ylim(-0.3,0.3)
     plt.grid()

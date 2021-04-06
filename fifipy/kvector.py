@@ -775,7 +775,7 @@ def computeDeltaVector(infile):
     if channel == 'R':
         ax1.set_ylim(-1.5,-0.5)
     else:
-        ax1.set_ylim(0.0,1.6)
+        ax1.set_ylim(-0.2,1.6)
     ax1.set_ylabel('$\Delta$x [mm]')
     ax1.set_xlabel('Grating position [ISU]')
     ax1.legend()
