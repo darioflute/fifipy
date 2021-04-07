@@ -656,7 +656,7 @@ def fitSourcePositions(rootdir, channel, dichroic):
         saveSourcePositions(rootdir, channel, dichroic, kmirr, gpos, xcenters, ycenters)           
         
         
-def computeDeltaVector(infile):
+def computeDeltaVector(infile, comparison = None):
     
     import matplotlib.pyplot as plt
     from astropy.io import fits
@@ -714,21 +714,23 @@ def computeDeltaVector(infile):
         id1 = order == 1
     
     # Previous results (from Sebastian - Aug 2020)
-    if channel == 'R':
-        if dichroic == '105':
-            bx_, ax_ = -9.8232E-01, -1.5215E-07
-            by_, ay_ = 1.1017E+00, -6.6339E-08
+    if comparison is None:
+        if channel == 'R':
+            if dichroic == '105':
+                bx_, ax_ = -9.8232E-01, -1.5215E-07
+                by_, ay_ = 1.1017E+00, -6.6339E-08
+            else:
+                bx_, ax_ = -9.1213E-01, -2.0640E-07
+                by_, ay_ = 1.2067E+00, -2.1206E-07
         else:
-            bx_, ax_ = -9.1213E-01, -2.0640E-07
-            by_, ay_ = 1.2067E+00, -2.1206E-07
+            if dichroic == '105':
+                bx_, ax_ = 5.5525E-01, 5.9397E-07
+                by_, ay_ = 9.4078E-01, -5.1105E-09
+            else:
+                bx_, ax_ = -1.8782E-02, 5.9025E-07
+                by_, ay_ = 1.0713E+00, 1.3475E-08
     else:
-        if dichroic == '105':
-            bx_, ax_ = 5.5525E-01, 5.9397E-07
-            by_, ay_ = 9.4078E-01, -5.1105E-09
-        else:
-            bx_, ax_ = -1.8782E-02, 5.9025E-07
-            by_, ay_ = 1.0713E+00, 1.3475E-08
-
+        bx_, ax_, by_, ay_ = comparison
  
     fig, (ax1,ax2) = plt.subplots(1,2,figsize=(12,5))
     if channel == 'R':
@@ -775,7 +777,7 @@ def computeDeltaVector(infile):
     if channel == 'R':
         ax1.set_ylim(-1.5,-0.5)
     else:
-        ax1.set_ylim(-0.2,1.6)
+        ax1.set_ylim(-0.4,1.6)
     ax1.set_ylabel('$\Delta$x [mm]')
     ax1.set_xlabel('Grating position [ISU]')
     ax1.legend()
