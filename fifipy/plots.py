@@ -17,6 +17,7 @@ def plotResponse(channel,dichroic,order,w,medspec,alpha,caldir,period):
     from astropy import units as u
     from astropy.modeling.blackbody import blackbody_nu
     from astropy.io import fits
+    import os
 
 
     if (period != 'New') & (period != 'Old'):
@@ -57,20 +58,21 @@ def plotResponse(channel,dichroic,order,w,medspec,alpha,caldir,period):
                 w1=59; w2=65
             xlim = [45,75]
 
-    transdir = '/Users/dfadda/sofia/FIFI-LS/SpectralFlats/Transmissions/'
-    f = np.loadtxt(transdir + trans, delimiter='\t')
+    path0, file0 = os.path.split(__file__)
+    transdir = os.path.join(path0,'data','Trasmission')
+    f = np.loadtxt(os.path.join(transdir , trans), delimiter='\t')
     wt = f[:,0]
     tt = f[:,1]
     mask = np.isfinite(tt)
     wt = wt[mask]
     tt = tt[mask]
-    f = np.loadtxt(transdir + eff, delimiter='\t')
+    f = np.loadtxt(os.path.join(transdir, eff), delimiter='\t')
     we = f[:,0]
     te = f[:,1]
     # Interpolation
     yinterp = np.interp(wt, we, te)
     tt *= yinterp
-    f = np.loadtxt(transdir + 'responsivity'+ctrans+'.txt', delimiter=' ')
+    f = np.loadtxt(os.path.join(transdir, 'responsivity'+ctrans+'.txt'), delimiter=' ')
     wr = f[:,0]
     tr = f[:,1]
     rinterp = np.interp(wt, wr, tr)

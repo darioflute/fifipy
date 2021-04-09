@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-def reduceData(rootdir, names=None):
+def reduceData(rootdir, names=None, channels=['sw','lw']):
     """
     Reduction of wavelength calibration data taken in the lab
 
@@ -29,9 +29,9 @@ def reduceData(rootdir, names=None):
     
     if names is None:
         names = np.arange(1,50)
-    for channel in ['sw','lw']:
+    for channel in channels:
         for name in names:
-            filenames = '*GC'+str(name)+'-*'+channel+'.fits'
+            filenames = '*_GC'+str(name)+'*'+channel+'.fits'
             files = sorted(gb(os.path.join(rootdir, '**', filenames), recursive=True))
             if len(files) > 0:
                 # Check sequence of grating positions
@@ -1111,7 +1111,7 @@ def fitg(g):
 
     return g0, NP, a_
 
-def plotLines(rootdir, channel, order,i=8,j=12):
+def plotLines(rootdir, channel, order,i=8,j=12,files=None):
     import matplotlib.pyplot as plt
     from astropy.io import fits
     from glob import glob as gb
@@ -1120,8 +1120,9 @@ def plotLines(rootdir, channel, order,i=8,j=12):
     from matplotlib.ticker import ScalarFormatter
     import numpy as np
     order = str(order)
-    filenames = channel+order+'*.fits'
-    files = sorted(gb(os.path.join(rootdir, 'Reduced', filenames)))
+    if files is None:
+        filenames = channel+order+'*.fits'
+        files = sorted(gb(os.path.join(rootdir, 'Reduced', filenames)))
     # Split in two plots if R
     if channel == 'B':
         fig,ax = plt.subplots(figsize=(18,6))
