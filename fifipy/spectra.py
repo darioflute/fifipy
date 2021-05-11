@@ -8,7 +8,8 @@ def getResolution(mode, l):
     elif mode == 'B1':
         return 0.16864 * l*l - 22.831 * l + 1316.6
     elif mode == 'B2':
-        return 1.9163 * l*l - 187.35 * l + 5496.9
+        #return 1.9163 * l*l - 187.35 * l + 5496.9  # Colditz's values
+        return 2.1046 * l*l - 202.72 * l + 5655.8  # new values
     else:
         print('Invalid mode entered. Valid modes are R, B1, and B2')
         return l*0

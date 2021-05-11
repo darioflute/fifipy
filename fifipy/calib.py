@@ -181,7 +181,7 @@ def readWindowTransmission():
 def readFlats(channel, order, dichroic, obsdate, silent=False):
     ''' Read flats '''
     wflat, specflat, especflat = readSpecFlats(channel, order, dichroic, silent=silent)
-    spatflat = readSpatFlats(channel, obsdate, silent=silent)
+    spatflat = readSpatFlats(channel, order, obsdate, silent=silent)
     return wflat, specflat, especflat, spatflat
 
 def readSpecFlats(channel, order, dichroic, silent=False):
@@ -202,7 +202,7 @@ def readSpecFlats(channel, order, dichroic, silent=False):
     hdl.close()
     return wflat, specflat, especflat
 
-def readSpatFlats(channel, obsdate, silent=False):
+def readSpatFlats(channel, order, obsdate, silent=False):
     ''' Read spatial flats.'''
     import os, re
     import numpy as np
@@ -210,7 +210,10 @@ def readSpatFlats(channel, obsdate, silent=False):
     if channel == 'RED':
         infile = path0 + '/data/spatialFlatR.txt'
     else:
-        infile = path0 + '/data/spatialFlatB.txt'
+        if order == 1:
+            infile = path0 + '/data/spatialFlatB1.txt'
+        else:
+            infile = path0 + '/data/spatialFlatB2.txt'
     data = np.genfromtxt(infile,dtype='str',skip_header=1)
     dates = data[:,0].astype(int)
     spatflats = data[:, 1:].astype(float)
@@ -269,9 +272,9 @@ def applyFlats(waves, fluxes, channel, order, dichroic, obsdate):
     import os
     path0, file0 = os.path.split(__file__)
     if channel == 'RED':
-        bads = np.loadtxt(path0 + '/data/badpixels_2019_r.txt')
+        bads = np.loadtxt(path0 + '/data/badpixels_202104_r.txt')
     else:
-        bads = np.loadtxt(path0 + '/data/badpixels_2019_b.txt')
+        bads = np.loadtxt(path0 + '/data/badpixels_202104_b.txt')
     for bad in bads:
         j,i = bad
         fluxes[:,np.int(j)-1,np.int(i)-1] = np.nan

@@ -10,7 +10,7 @@ def computeFluxes(group):
     from fifipy.io import readData
     from fifipy.fit import multiSlopes
     from fifipy.calib import waveCal, applyFlats
-    from fifipy.sensitivy import applyResponse
+    from fifipy.sensitivity import applyResponse
     import numpy as np
     from numpy import transpose
     c = 299792458.e+6 # um/s
@@ -49,8 +49,7 @@ def computeFluxes(group):
     # one obsdate is OK, since data are taken during the same day
     fluxes = applyFlats(waves, fluxes, detchan, order, dichroic, obsdate)
     # Apply response
-    fluxes = applyResponse(waves, fluxes, detchan, order, dichroic, obsdate)
-    
+    applyResponse(waves, fluxes, detchan, order, dichroic, obsdate)
     return waves, fluxes, detchan, order, za[0], altitude[0]
 
 def fitSlopesFile(file):
@@ -84,6 +83,7 @@ def fitSlopesFile(file):
         dv0 = dv0.reshape(n1*n2, n3)
         # Compute the mean slope
         dvm = biweightLocation(dv0, axis=0) / dtime
+        ## Maybe a more traditional approach by fitting the slope...
         spectra.append(dvm)
     return spectra, gratpos
 
@@ -92,6 +92,7 @@ def computeMeanFlux(group, multi=True, subtractzero=True):
     from fifipy.io import readData
     #from fifipy.stats import biweightLocation
     from fifipy.calib import mwaveCal, applyFlats
+    from fifipy.sensitivity import applyResponse
     import numpy as np
     from dask import delayed, compute
     c = 299792458.e+6 # um/s
@@ -139,6 +140,7 @@ def computeMeanFlux(group, multi=True, subtractzero=True):
     wave = np.transpose(wave, (0, 2, 1))  # Transpose the 2 last axes
     flux = np.transpose(flux, (0, 2, 1))
     flux = applyFlats(wave, flux, detchan, order, dichroic, obsdate) 
+    applyResponse(wave, flux,detchan,order,dichroic,obsdate)
     return wave, flux, detchan, order, za[0], altitude[0]
 
 def alphabeta(x,y):
@@ -207,10 +209,12 @@ def reflat(waves, fluxes, good, computeAlpha=True):
             alpha[i], beta[i] = alphabeta(wi, f_(wi)/fi)
             #alpha[i] = np.nansum(fi*f_(wi))/np.nansum(fi*fi)
     
-        # Recompute
+        # Reflat
         for i in good:
             #print(i, alpha[i], beta[i])
             fluxes[:,i,:] *= alpha[i] + beta[i] * waves[:,i,:]
+        # Maybe I should pass the fluxes back and run another normalization per spaxel
+        # It would be good anyway to get rid of outliers.
         wtot = np.ravel(waves[:,good,:])
         ftot = np.ravel(fluxes[:,good,:])
         idx = np.isfinite(ftot)
@@ -219,11 +223,17 @@ def reflat(waves, fluxes, good, computeAlpha=True):
         # Get rid of outliers
         fm = medfilt(ftot, 31)
         di = ftot - fm
+        fmi = interp1d(wtot, fm, fill_value='extrapolate')
         medi = np.nanmedian(ftot - fm)
         madi = np.nanmedian(np.abs(ftot - medi))
         idx = np.abs(di) < 5 * madi
-        wtot = wtot[idx]
-        ftot = ftot[idx]
+        for j in good:
+            for i in range(16):
+                wi = waves[:,j,i]
+                fi = fluxes[:,j,i]
+                di = fi - fmi(wi)
+                idx = np.abs(di) > 5 * madi
+                fi[idx] = np.nan
         
     idx = np.argsort(wtot)
     wtot = wtot[idx]
@@ -255,7 +265,7 @@ def computeXcorr(wtot, ftot, wt, at):
     zmin = zs[i]
     
     speedoflight = 300000.
-    print('cz ', speedoflight * zmin)
+    print('Delta w ',  zmin * np.mean(wt))
     return zmin    
     
 
@@ -264,6 +274,7 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
     import matplotlib.pyplot as plt
     from fifipy.calib import readAtran
     import numpy as np
+    from fifipy.stats import biweightLocation
     #import time
     #from astropy import units as u
     #from astropy.modeling.blackbody import blackbody_nu
@@ -284,11 +295,15 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
     #        fluxes[:,j,i] -= fbb_nu
 
     if detchan == 'RED':  
-        good = [1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+        #good = [1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,21,22,23]
+        #good = [0,1,3,5,6,7,8,10,11,12,13,15,16,17,18,21,22,23]
+        good = [0,1,3,5,6,7,8,10,11,12,13,15,16,17,18,22,23]
         #good = [0,6,7,8,10,11,13,14,15,16,19,23]
     else:
         #good = [1,2,6,7,8,11,12,13,16,17,20,21,22]
-        good = [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+        #good = [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23]
+        #good = [1,2,3,6,7,8,11,12,13,16,17,20,21,22]
+        good = [1,2,3,6,7,8,11,12,13,16,17,22]
     # compute better spatial flats
     wtot, ftot = reflat(waves, fluxes, good, computeAlpha=computeAlpha)
     
@@ -320,26 +335,74 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         #w2 = 0.5 * (lc2[0] + lc2[1])
         #ftot -= np.interp(wtot, np.array([w1,w2]), np.array([f1,f2]))
         # Compute the normalized curve
-        lc = [61.55,61.70]
-        lm = [63.30,63.34]
-        idmin = ((wtot > lc[0]) & (wtot < lc[1])) #| ((wtot > lc1[0]) & (wtot < lc1[1]))
+        lc = [61.60,61.65]
+        lc2 = [61.95, 62.05]
+        lm = [63.32,63.35]
+        
+        # all the spaxels at once
+        idmin = ((wtot > lc[0]) & (wtot < lc[1])) 
+        idmin2 = ((wtot > lc2[0]) & (wtot < lc2[1]))
+        w1f = np.nanmean(wtot[idmin])
+        w2f = np.nanmean(wtot[idmin2])
         idmax = (wtot > lm[0]) & (wtot < lm[1])
-        fmin = np.nanmedian(ftot[idmin])
-        fmax = np.nanmedian(ftot[idmax])
+        #fmin = np.nanmedian(ftot[idmin])
+        #fmin1 = np.nanmedian(ftot[idmin])
+        #fmin2 = np.nanmedian(ftot[idmin2])
+        fmin1 = biweightLocation(ftot[idmin])
+        fmin2 = biweightLocation(ftot[idmin2])
+        mf = (fmin2-fmin1)/(w2f-w1f)
+        fmin = mf * (wtot-w1f) + fmin1
+        fmax = biweightLocation(ftot[idmax])
         df = fmax - fmin
-        ftotabs = 1-(ftot-fmin)/df
-        # Normalize at the same way the ATRAN models
+        ftotabs = 1 - (ftot - fmin)/df
+        
+        # each spaxel separately
+        wtot = []
+        ftotabs = []
+        for j in good:
+            wj = np.ravel(waves[:,j,:])
+            fj = np.ravel(fluxes[:,j,:])
+            idmin = ((wj > lc[0]) & (wj < lc[1])) 
+            idmin2 = ((wj > lc2[0]) & (wj < lc2[1]))
+            idmax = (wj > lm[0]) & (wj < lm[1])
+            fmin1 = biweightLocation(fj[idmin])
+            fmin2 = biweightLocation(fj[idmin2])
+            mf = (fmin2-fmin1)/(w2f-w1f)
+            fmin = mf * (wj-w1f) + fmin1
+            fmax = biweightLocation(fj[idmax])
+            df = fmax - fmin
+            fj = 1 - (fj - fmin)/df
+            idx = np.isfinite(fj)
+            wtot.extend(wj[idx])
+            ftotabs.extend(fj[idx])
+        # order
+        wtot = np.array(wtot)
+        ftotabs = np.array(ftotabs)
+        s = np.argsort(wtot)
+        wtot = wtot[s]
+        ftotabs = ftotabs[s]
+        
         diff = []
         idmin = (wt > lc[0]) & (wt < lc[1])
+        idmin2 = (wt > lc2[0]) & (wt < lc2[1])
         idmax = (wt > lm[0]) & (wt < lm[1])
+        w1 = np.nanmean(wt[idmin])
+        w2 = np.nanmean(wt[idmin2])
+        #print('w1, w2', w1,w2)
         for t, wv in zip(at, wvs):
             t = t**depth  # Apply the ZA
-            tmax = np.nanmedian(t[idmin])
-            tmin = np.nanmedian(t[idmax])
-            t = (t-tmin)/(tmax-tmin)  # Normalize
+            tmax1 = np.nanmean(t[idmin])
+            tmax2 = np.nanmean(t[idmin2])
+            m = (tmax2-tmax1)/(w2-w1)
+            #tmax = m * (wt-w1) + tmax1
+            tmin = np.nanmean(t[idmax])
+            #t = (t-tmin)/(tmax-tmin)  # Normalize
             ti  = np.interp(wtot,wt,t)
-            idx = ftotabs < 1.1
-            diff.append(np.nansum((ti[idx] - ftotabs[idx])**2))
+            idx = (ftotabs < 1.05) & (ftotabs > -0.05) & (wtot > 63.0)
+            tmax = m * (wtot - w1) + tmax1
+            ftotabsc = ftotabs * (tmax-tmin) + tmin           
+            #diff.append(biweightLocation((ti[idx] - ftotabsc[idx])**2))
+            diff.append(np.nansum((ti[idx] - ftotabsc[idx])**2))
         diff = np.array(diff)
         imin = np.argmin(diff)
         wvmin = wvs[imin]
@@ -358,12 +421,18 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             pass
             
         t = at[imin]**depth
-        tmax = np.nanmedian(t[idmin])
-        tmin = np.nanmedian(t[idmax])
-        t = (t-tmin)/(tmax-tmin) # Normalize
+        #tmax = np.nanmedian(t[idmin])
+        tmax1 = np.nanmean(t[idmin])
+        tmax2 = np.nanmean(t[idmin2])
+        m = (tmax2-tmax1)/(w2-w1)
+        #tmax = m * (wt-w1) + tmax1
+        tmin = np.nanmean(t[idmax])
+        #t = (t-tmin)/(tmax-tmin) # Normalize
         
         # We can cross-correlate here
         if xcorr:
+            #print(wtot)
+            #print(ftotabs)
             zcorr = computeXcorr(wtot, ftotabs, wt, t)
             #waves /= 1 + zcorr
 
@@ -374,25 +443,75 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             ax.set_title('WVZ')
             ax.plot(wvs,diff/np.nanmax(diff))#, 'o')
             ax.grid()
-            ax=axes[1]
+            ax1 = axes[1]
+            ax2 = axes[2]
             for j in good:
-                ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.')
-            ax.set_xlim(61.45,62.19)
-            ax.set_ylim(-0.3,1.2)
-            ax.plot( wt,t,color='orange',linewidth=2)
-            ax.grid()
-            ax=axes[2]
-            for j in good:
-                ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.')
-            ax.set_xlim(63.01,63.75)
-            ax.set_ylim(-0.3,1.2)
-            ax.grid()
+                wj = np.ravel(waves[:,j,:])
+                fj = np.ravel(fluxes[:,j,:])
+                idmin = ((wj > lc[0]) & (wj < lc[1])) 
+                idmin2 = ((wj > lc2[0]) & (wj < lc2[1]))
+                idmax = (wj > lm[0]) & (wj < lm[1])
+                fmin1 = biweightLocation(fj[idmin])
+                fmin2 = biweightLocation(fj[idmin2])
+                mf = (fmin2-fmin1)/(w2f-w1f)
+                fmin = mf * (wj-w1f) + fmin1
+                fmax = biweightLocation(fj[idmax])
+                df = fmax - fmin
+                fj = 1 - (fj - fmin)/df
+                ti  = np.interp(wtot,wt,t)
+                tmax = m * (wj - w1) + tmax1
+                fj = fj * (tmax-tmin) + tmin
+                ax1.plot(wj, fj,'.')
+                ax2.plot(wj, fj,'.',label=str(j))
+            ax1.set_xlim(61.45,62.19)
+            ax1.set_ylim(-0.3,1.2)
+            ax1.plot( wt,t,color='orange',linewidth=2)
+            ax1.grid()
+            ax2.set_xlim(63.01,63.75)
+            ax2.set_ylim(-0.3,1.2)
+            ax2.grid()
+            ax2.legend()
             plt.subplots_adjust(wspace=0)
-            ax.plot( wt,t,color='orange',linewidth=2)
+            ax2.plot( wt,t,color='orange',linewidth=2)
             fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+
                          ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
             fig.subplots_adjust(top=0.9) 
             plt.show()
+
+            #for j in good:
+            #    fmin = mf * (np.ravel(waves[:,j,:])-w1f) + fmin1
+            #    fj = 1-(np.ravel(fluxes[:,j,:])-fmin)/(fmax-fmin)
+            #    wj = np.ravel(waves[:,j,:])
+            #    ti  = np.interp(wtot,wt,t)
+            #    tmax = m * (wj - w1) + tmax1
+            #    fj = fj * (tmax-tmin) + tmin
+            #    ax.plot(wj, fj,'.')
+            #    #ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/(fmax-fmin),'.')
+            #ax.set_xlim(61.45,62.19)
+            #ax.set_ylim(-0.3,1.2)
+            #ax.plot( wt,t,color='orange',linewidth=2)
+            #ax.grid()
+            #ax=axes[2]
+            #for j in good:
+            #    fmin = mf * (np.ravel(waves[:,j,:])-w1f) + fmin1
+            #    fj = 1-(np.ravel(fluxes[:,j,:])-fmin)/(fmax-fmin)
+            #    wj = np.ravel(waves[:,j,:])
+            #    ti  = np.interp(wtot,wt,t)
+            #    tmax = m * (wj - w1) + tmax1
+            #    fj = fj * (tmax-tmin) + tmin
+            #    ax.plot(wj, fj,'.',label=str(j))
+            #    #fmin = mf * (np.ravel(waves[:,j,:])-w1f) + fmin1
+            #     #ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/(fmax - fmin),'.',label=str(j))
+            #ax.set_xlim(63.01,63.75)
+            #ax.set_ylim(-0.3,1.2)
+            #ax.grid()
+            #ax.legend()
+            #plt.subplots_adjust(wspace=0)
+            #ax.plot( wt,t,color='orange',linewidth=2)
+            #fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+
+            #             ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
+            #fig.subplots_adjust(top=0.9) 
+            #plt.show()
     else:
         # Subtract BB (interpolation between T ~ 1)
         #lc1 = [145.65, 145.85]
@@ -404,28 +523,83 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
         #w1 = 0.5 * (lc1[0] + lc1[1])
         #w2 = 0.5 * (lc2[0] + lc2[1])
         #ftot -= np.interp(wtot, np.array([w1,w2]), np.array([f1,f2]))
-        #lc = [148.1, 148.3]
         lc = [149.3, 149.6]
-        #lc = [148.0, 148.2]
-        lm = [146.85,147]
+        lc2 = [145.6,145.9]
+        lm = [146.85,147.00]
         idmin = (wtot > lc[0]) & (wtot < lc[1])
+        idmin2 = (wtot > lc2[0]) & (wtot < lc2[1])
+        w1f = np.nanmean(wtot[idmin])
+        w2f = np.nanmean(wtot[idmin2])
         idmax = (wtot > lm[0]) & (wtot < lm[1])
-        fmin = np.nanmedian(ftot[idmin])
-        fmax = np.nanmedian(ftot[idmax])
-        df = fmax - fmin
+        fmin1t = biweightLocation(ftot[idmin])
+        fmin2t = biweightLocation(ftot[idmin2])
+        mf = (fmin2t-fmin1t)/(w2f-w1f)
+        fmin = mf * (wtot-w1f) + fmin1t
+        #fmin = biweightLocation(ftot[idmin])
+        fmaxt = biweightLocation(ftot[idmax])
+        df = fmaxt - fmin
         ftotabs = 1-(ftot-fmin)/df
+        
+        # each spaxel separately
+        wtot = []
+        ftotabs = []
+        for j in good:
+            wj = np.ravel(waves[:,j,:])
+            fj = np.ravel(fluxes[:,j,:])
+            idmin = ((wj > lc[0]) & (wj < lc[1])) 
+            idmin2 = ((wj > lc2[0]) & (wj < lc2[1]))
+            idmax = (wj > lm[0]) & (wj < lm[1])
+            fjok = np.isfinite(fj[idmin])
+            if np.sum(fjok) == 0:
+                fmin1 = fmin1t
+            else:
+                fmin1 = biweightLocation(fj[idmin])
+            fjok = np.isfinite(fj[idmin2])
+            if np.sum(fjok) == 0:
+                fmin2 = fmin2t
+            else:
+                fmin2 = biweightLocation(fj[idmin2])
+            mf = (fmin2-fmin1)/(w2f-w1f)
+            fmin = mf * (wj-w1f) + fmin1
+            fjok = np.isfinite(fj[idmax])
+            if np.sum(fjok) == 0:
+                fmax = fmaxt
+            else:
+                fmax = biweightLocation(fj[idmax])
+            df = fmax - fmin
+            fj = 1 - (fj - fmin)/df
+            idx = np.isfinite(fj)
+            wtot.extend(wj[idx])
+            ftotabs.extend(fj[idx])
+        # order
+        wtot = np.array(wtot)
+        ftotabs = np.array(ftotabs)
+        s = np.argsort(wtot)
+        wtot = wtot[s]
+        ftotabs = ftotabs[s]
+
         # Normalize at the same way the ATRAN models
         diff = []     
         idmin = (wt > lc[0]) & (wt < lc[1])
+        idmin2 = (wt > lc2[0]) & (wt < lc2[1])
         idmax = (wt > lm[0]) & (wt < lm[1])
+        w1 = np.nanmean(wt[idmin])
+        w2 = np.nanmean(wt[idmin2])
         for t,wv in zip(at,wvs):
             t = t**depth  # Apply the ZA
-            tmax = np.nanmedian(t[idmin])
-            tmin = np.nanmedian(t[idmax])
-            t = (t-tmin)/(tmax-tmin)  # Normalize
+            tmax1 = np.nanmean(t[idmin])
+            tmax2 = np.nanmean(t[idmin2])
+            m = (tmax2-tmax1)/(w2-w1)
+            #tmax = m * (wt-w1) + tmax1
+            #tmax = np.nanmean(t[idmin])
+            tmin = np.nanmean(t[idmax])
+            #t = (t-tmin)/(tmax-tmin)  # Normalize
             ti  = np.interp(wtot,wt,t)
-            idx = ftotabs < 1.2
-            diff.append(np.nansum((ti[idx] - ftotabs[idx])**2))
+            idx = (ftotabs < 1.05) & (ftotabs > -0.05)
+            tmax = m * (wtot - w1) + tmax1
+            ftotabsc = ftotabs * (tmax-tmin) + tmin
+            #diff.append(biweightLocation((ti[idx] - ftotabsc[idx])**2))
+            diff.append(np.nansum((ti[idx] - ftotabsc[idx])**2))
         diff = np.array(diff)
         imin = np.argmin(diff)
         wvmin = wvs[imin]
@@ -443,9 +617,15 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             pass
 
         t = at[imin]**depth
-        tmax = np.nanmedian(t[idmin])
-        tmin = np.nanmedian(t[idmax])
-        t = (t-tmin)/(tmax-tmin) # Normalize
+        tmax1 = np.nanmean(t[idmin])
+        tmax2 = np.nanmean(t[idmin2])
+        m = (tmax2-tmax1)/(w2-w1)
+        #tmax = m * (wt-w1) + tmax1
+        #tmax = np.nanmean(t[idmin])
+        tmin = np.nanmean(t[idmax])
+        #t = (t-tmin)/(tmax-tmin) # Normalize
+        
+        
         # We can cross-correlate here
         if xcorr:
             zcorr = computeXcorr(wtot, ftotabs, wt, t)
@@ -460,11 +640,40 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             ax.grid()
             ax=axes[1]
             for j in good:
-                ax.plot(np.ravel(waves[:,j,:]),1-(np.ravel(fluxes[:,j,:])-fmin)/df,'.',label=str(j))
+                wj = np.ravel(waves[:,j,:])
+                fj = np.ravel(fluxes[:,j,:])
+                idmin = ((wj > lc[0]) & (wj < lc[1])) 
+                idmin2 = ((wj > lc2[0]) & (wj < lc2[1]))
+                idmax = (wj > lm[0]) & (wj < lm[1])
+                fjok = np.isfinite(fj[idmin])
+                if np.sum(fjok) == 0:
+                    fmin1 = fmin1t
+                else:
+                    fmin1 = biweightLocation(fj[idmin])
+                fjok = np.isfinite(fj[idmin2])
+                if np.sum(fjok) == 0:
+                    fmin2 = fmin2t
+                else:
+                    fmin2 = biweightLocation(fj[idmin2])
+                mf = (fmin2-fmin1)/(w2f-w1f)
+                fmin = mf * (wj-w1f) + fmin1
+                fjok = np.isfinite(fj[idmax])
+                if np.sum(fjok) == 0:
+                    fmax = fmaxt
+                else:
+                    fmax = biweightLocation(fj[idmax])
+                df = fmax - fmin
+                fj = 1 - (fj - fmin)/df
+                ti  = np.interp(wtot,wt,t)
+                tmax = m * (wj - w1) + tmax1
+                fj = fj * (tmax-tmin) + tmin
+                ax.plot(wj, fj,'.',label=str(j))
+            
             ax.set_ylim(-0.3,1.2)
             ax.set_xlim(np.nanmin(wtot),np.nanmax(wtot))
             ax.plot( wt,t,color='orange',linewidth=2)
             ax.grid()
+            ax.legend()
             fig.suptitle(' Channel: '+str(detchan)+ ', Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+ 
                          ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
             plt.subplots_adjust(wspace=0)
@@ -475,7 +684,8 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
 def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     import numpy as np
     import matplotlib.pyplot as plt
-        
+    from fifipy.stats import biweightLocation 
+    
     wtr, atranr, altitudes, wvs = atran1
     wtb, atranb, altitudes, wvs = atran2
     imin = np.argmin(np.abs(altitudes-altitude))
@@ -491,33 +701,59 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     depth = dx / c    
     
     # Blue
-    lc = [61.55,61.70]
-    lm = [63.30,63.34]
-    idbmin = (wtb > lc[0]) & (wtb < lc[1])
+    lc = [61.60,61.65]
+    lc2 = [61.95, 62.05]
+    
+    lm = [63.32,63.35]
+    idbmin1 = (wtb > lc[0]) & (wtb < lc[1])
+    idbmin2 = (wtb > lc2[0]) & (wtb < lc2[1])
+    w1b = np.nanmean(wtb[idbmin1])
+    w2b = np.nanmean(wtb[idbmin2])
     idbmax = (wtb > lm[0]) & (wtb < lm[1])
     
     lc = [149.3, 149.6]
-    #lc = [148.0,148.3]
-    lm = [146.85,147]
-    idrmin = (wtr > lc[0]) & (wtr < lc[1])
+    lc2 = [145.7,145.9]
+    lm = [146.85,147.00]
+    idrmin1 = (wtr > lc[0]) & (wtr < lc[1])
+    idrmin2 = (wtr > lc2[0]) & (wtr < lc2[1])
+    w1r = np.nanmean(wtr[idrmin1])
+    w2r = np.nanmean(wtr[idrmin2])
     idrmax = (wtr > lm[0]) & (wtr < lm[1])
     
     diff = []
     for tr, tb, wv in zip(atr, atb, wvs):
         tb = tb**depth  # Apply the ZA
-        tmax = np.nanmedian(tb[idbmin])
-        tmin = np.nanmedian(tb[idbmax])
-        tb = (tb-tmin)/(tmax-tmin)  # Normalize
+        #tmax = np.nanmean(tb[idbmin])
+        tmax1 = np.nanmean(tb[idbmin1])
+        tmax2 = np.nanmean(tb[idbmin2])
+        m = (tmax2-tmax1)/(w2b-w1b)
+        #tmax = m * (wtb-w1b) + tmax1
+        tmin = np.nanmean(tb[idbmax])
+        #tb = (tb-tmin)/(tmax-tmin)  # Normalize
         tbi  = np.interp(wblue,wtb,tb)
-        idxb = fblue < 1.1
+        tmax = m * (wblue - w1b) + tmax1
+        fbluec = fblue * (tmax-tmin) + tmin
+        
+        idxb = (fblue < 1.1) & (wblue > 63.0) & (fblue > -0.05)
         tr = tr**depth  # Apply the ZA
-        tmax = np.nanmedian(tr[idrmin])
-        tmin = np.nanmedian(tr[idrmax])
-        tr = (tr-tmin)/(tmax-tmin)  # Normalize
+        tmax1 = np.nanmean(tr[idrmin1])
+        tmax2 = np.nanmean(tr[idrmin2])
+        m = (tmax2-tmax1)/(w2r-w1r)
+        #tmax = m * (wtr-w1r) + tmax1
+        #tmax = np.nanmean(tr[idrmin])
+        tmin = np.nanmean(tr[idrmax])
+        #tr = (tr-tmin)/(tmax-tmin)  # Normalize
+        # Should I normalize the fblue to these values ?
+        
         tri  = np.interp(wred,wtr,tr)
-        idxr = fred < 1.1
-        diff.append(np.nanmean((tbi[idxb] - fblue[idxb])**2) +
-                    np.nanmean((tri[idxr] - fred[idxr])**2))
+        tmax = m * (wred - w1r) + tmax1
+        fredc = fred * (tmax-tmin) + tmin
+        
+        idxr = (fred < 1.1) & (fred > -0.05)
+        #diff.append(biweightLocation((tbi[idxb] - fbluec[idxb])**2) +
+        #            biweightLocation((tri[idxr] - fredc[idxr])**2))
+        diff.append(np.nansum((tbi[idxb] - fbluec[idxb])**2) +
+                    np.nansum((tri[idxr] - fredc[idxr])**2))
             
     diff = np.array(diff)
     imin = np.argmin(diff)
@@ -540,13 +776,31 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     
 
     tb = atb[imin]**depth
-    tmax = np.nanmean(tb[idbmin])
+    tmax1 = np.nanmean(tb[idbmin1])
+    tmax2 = np.nanmean(tb[idbmin2])
+    m = (tmax2-tmax1)/(w2b-w1b)
+    #tmax = m * (wtb-w1b) + tmax1
     tmin = np.nanmean(tb[idbmax])
-    tb = (tb-tmin)/(tmax-tmin) # Normalize
+    print('tmin blue ', tmin)
+    #tmax = np.nanmean(tb[idbmin])
+    #tb = (tb-tmin)/(tmax-tmin) # Normalize
+    tbi  = np.interp(wblue,wtb,tb)
+    tmax = m * (wblue - w1b) + tmax1
+    fbluec = fblue * (tmax - tmin) + tmin
+    
+    
     tr = atr[imin]**depth
-    tmax = np.nanmean(tr[idrmin])
+    tmax1 = np.nanmean(tr[idrmin1])
+    tmax2 = np.nanmean(tr[idrmin2])
+    m = (tmax2-tmax1)/(w2r-w1r)
+    #tmax = m * (wtr-w1r) + tmax1
+    #tmax = np.nanmean(tr[idrmin])
     tmin = np.nanmean(tr[idrmax])
-    tr = (tr-tmin)/(tmax-tmin) # Normalize
+    print('tmin red ', tmin)
+    #tr = (tr-tmin)/(tmax-tmin) # Normalize
+    tri  = np.interp(wred,wtr,tr)
+    tmax = m * (wred - w1r) + tmax1
+    fredc = fred * (tmax - tmin) + tmin
 
 
     fig,axes = plt.subplots(1, 4, figsize=(16,5), sharey=True,
@@ -556,21 +810,21 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
     ax.plot(wvs,diff/np.nanmax(diff))#, 'o')
     ax.grid()
     ax=axes[1]
-    ax.plot(wblue, fblue,'.')
-    ax.set_xlim(61.45,62.19)
+    ax.plot(wblue, fbluec,'.')
+    ax.set_xlim(61.51,62.11)
     ax.set_ylim(-0.3,1.2)
     ax.plot( wtb,tb,color='orange',linewidth=2)
     ax.grid()
     ax=axes[2]
-    ax.plot(wblue, fblue,'.')
-    ax.set_xlim(63.01,63.75)
+    ax.plot(wblue, fbluec,'.')
+    ax.set_xlim(63.01,63.77)
     ax.set_ylim(-0.3,1.2)
     ax.grid()
     plt.subplots_adjust(wspace=0)
     ax.plot( wtb,tb,color='orange',linewidth=2)
     ax=axes[3]
-    ax.plot(wred, fred,'.',color='red')
-    ax.set_xlim(145.6, 149.9)
+    ax.plot(wred, fredc,'.',color='red')
+    ax.set_xlim(145.5, 149.9)
     ax.set_ylim(-0.3,1.2)
     ax.grid()
     plt.subplots_adjust(wspace=0)
@@ -586,6 +840,7 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2):
 
 def getGroups(wvzdir, flight):
     from glob import glob as gb
+    import numpy as np
     path = wvzdir + '/' + flight
     
     groups = []
@@ -600,7 +855,7 @@ def getGroups(wvzdir, flight):
         
     #print(afiles)
         
-    return groups
+    return np.array(groups)
 
 def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
     from matplotlib import rcParams
@@ -621,8 +876,8 @@ def flightPlots(lwgroups, alt, wblue, wred, wtot, title, monitor=True):
     for group in lwgroups:
         file = group[0]
         header = getheader(file)
-        #temp.append(header['TEMPPRI1'])
-        temp.append(header['TEMP_OUT'])
+        temp.append(header['TEMPPRI1'])
+        #temp.append(header['TEMP_OUT'])
         date.append(header['DATE-OBS'])
         wmon.append(header['WVZ_STA'])
         t = re.findall(r'\_(\d{6})\_',file)
@@ -759,13 +1014,17 @@ def baryshift(obsdate, ra, dec, equinox='J2000'):
     return result.value
 
 
-def computeWVZ(wvzdir,flight,atran1,atran2):
+def computeWVZ(wvzdir,flight,atran1,atran2,subgroup=None,computeAlpha=True):
     import numpy as np
-    from fifipy.wvz import computeMeanFlux, computeAtran, getGroups, computeAtranTot
+    from fifipy.wvz import computeMeanFlux, computeAtran, getGroups, computeAtranTot, computeFluxes
     #import time
     import os
 
     swgroups, lwgroups = getGroups(wvzdir, 'FLT'+flight)
+    if subgroup is not None:
+        if len(swgroups) > 0:
+            swgroups = swgroups[subgroup]
+        lwgroups = lwgroups[subgroup]
     ngroups = len(lwgroups)
     alt = []
     wmblue = []
@@ -773,14 +1032,17 @@ def computeWVZ(wvzdir,flight,atran1,atran2):
     wmtot = []
     numfile = []
 
-    if swgroups == []:
+    if len(swgroups) == 0:
         for i, lwgroup in enumerate(lwgroups):
             print(i+1 ,' / ', ngroups)
             fileparts = os.path.basename(lwgroup[0]).split('_')
             numfile.append(fileparts[0])
             #t0 = time.process_time()
             wavesr, fluxesr, detchanr, orderr, zar, altituder = computeMeanFlux(lwgroup)
-            wvmin, alpha, wred, fred = computeAtran(wavesr, fluxesr, detchanr, orderr, zar, altituder, atrandata=atran1, plot=True)
+            #wavesr, fluxesr, detchanr, orderr, zar, altituder = computeFluxes(lwgroup)
+            wvmin, alpha, wred, fred = computeAtran(wavesr, fluxesr, detchanr, 
+                                                    orderr, zar, altituder, atrandata=atran1, 
+                                                    plot=True, computeAlpha=computeAlpha)
             wmred.append(wvmin)
             alt.append(altituder)        
     else:
@@ -790,10 +1052,16 @@ def computeWVZ(wvzdir,flight,atran1,atran2):
             numfile.append(fileparts[0])
             #t0 = time.process_time()
             wavesb, fluxesb, detchanb, orderb, zab, altitudeb = computeMeanFlux(swgroup)
-            wvmin, alpha, wblue, fblue = computeAtran(wavesb, fluxesb, detchanb, orderb, zab, altitudeb, atrandata=atran2, plot=False)
+            #wavesb, fluxesb, detchanb, orderb, zab, altitudeb = computeFluxes(swgroup)
+            wvmin, alpha, wblue, fblue = computeAtran(wavesb, fluxesb, detchanb,
+                                                      orderb, zab, altitudeb, atrandata=atran2, 
+                                                      plot=True, computeAlpha=computeAlpha)
             wmblue.append(wvmin)
             wavesr, fluxesr, detchanr, orderr, zar, altituder = computeMeanFlux(lwgroup)
-            wvmin, alpha, wred, fred = computeAtran(wavesr, fluxesr, detchanr, orderr, zar, altituder, atrandata=atran1, plot=False)
+            #wavesr, fluxesr, detchanr, orderr, zar, altituder = computeFluxes(lwgroup)
+            wvmin, alpha, wred, fred = computeAtran(wavesr, fluxesr, detchanr,
+                                                    orderr, zar, altituder, 
+                                                    atrandata=atran1, plot=True, computeAlpha=computeAlpha)
             wmred.append(wvmin)
             # Two fluxes at same time
             wvmin = computeAtranTot(wred, fred, wblue ,fblue, zar, altituder, atran1, atran2)

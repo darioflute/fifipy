@@ -1,9 +1,68 @@
 import numpy as np
 from scipy import stats
 from dask import delayed, compute
-# from dask.distributed import Client
-# from dask.distributed import LocalCluster
-# import dask.multiprocessing
+import numba
+
+# @numba.njit(cache=True,nogil=True,parallel=False)
+# def fitSlope(data, telSim=False, off=False):
+#     """
+#         Fit the slope of a series of ramps for lab data.
+#         In this case, data are taken with the internal calibrator.
+#         A wheel with two holes allows to see the calibrator twice during a cycle.
+#         Only the 1st and 3rd ramps are retained, the other two being affected by the change in flux.
+#         The off position corresponds to the wheel position when the calibrator is not visible.
+#     """
+
+#     saturationLimit = 2.7
+#     dtime = 1/250.  # Hz
+#     x = dtime * np.arange(32)
+#     rshape = np.shape(data)
+#     ngratings = rshape[0]
+#     nramps = rshape[1] // 32  # There are 32 readouts per ramp
+  
+#     if telSim:
+#         indices = [1,3]
+#     else:
+#         indices = [0,2]
+    
+#     rslopes = np.empty(len(indices), dtype=numba.float64)
+#     slopes = np.empty(ngratings, dtype=numba.float64)
+#     ramps = np.empty((nramps, 32), dtype=numba.float64)
+#     yramp = np.empty(32, dtype=numba.float64)
+#     for ig in numba.prange(ngratings):
+#         for nr in numba.prange(nramps):
+#             ramps[nr,:]= data[ig,nr*32:(nr+1)*32]
+#         for ij, j in enumerate(indices):  # Consider only the 1st and 3rd ramps
+#             ramp = ramps[j::4,:]  # One every 4 ramps
+#             for ir in numba.prange(32):
+#                 yramp[ir] = np.nanmean(ramp[:,ir])
+#             #ramp = np.nanmean(ramp, axis = 0)
+#             # Mask saturated values
+#             mask = yramp > saturationLimit
+#             # Mask first readouts and last one
+#             mask[0:2] = 1
+#             mask[-1] = 1
+#             if np.sum(~mask) > 5:  # Compute only if there are at least 5 pts
+#                 xx = x[~mask]
+#                 yy = yramp[~mask]
+#                 nm = len(x[~mask])
+#                 A = np.empty((nm, 2), dtype=numba.float64)
+#                 for im in numba.prange(nm):
+#                     A[im,0] = xx[im]
+#                     A[im,1] = 1
+#                 slope, intercept = np.linalg.lstsq(A, yy)[0]
+#                 rslopes[ij] = slope
+#             else:
+#                 rslopes[ij] = np.nan
+#         if off:
+#             # Case to compute sensitivities as in the pipeline (no V/s, just ADU)
+#             slopes[ig] = rslopes[0] * dtime / (3.63/65536.)
+#         else:
+#             slopes[ig] = rslopes[1]-rslopes[0]  # On - Off        
+#    return slopes
+
+
+
 
 def fitSlope(data, telSim=False, off=False):
     """
@@ -25,11 +84,11 @@ def fitSlope(data, telSim=False, off=False):
         indices = [1,3]
     else:
         indices = [0,2]
-    
+  
     for ig in range(ngratings):
         ramps = data[ig,:].reshape(nramps, 32)
         rslopes = []
-        
+      
         for j in indices:  # Consider only the 1st and 3rd ramps
             ramp = ramps[j::4,:]  # One every 4 ramps
             ramp = np.nanmean(ramp, axis = 0)
@@ -49,7 +108,7 @@ def fitSlope(data, telSim=False, off=False):
             slopes.append(rslopes[0] * dtime / (3.63/65536.))
         else:
             slopes.append(rslopes[1]-rslopes[0])  # On - Off
-        
+      
     return np.array(slopes)
 
 def fitSlopeSky(data):
@@ -148,13 +207,20 @@ def fitAllSlopes(data, telSim=False, off=False):
         
     # Using only spaxels
     spaxels = [delayed(fitSlopeSpax)(data[:,:,i,:], telSim, off) for i in range(16)]        
-    
-    #spectra = compute(* spaxels)
     spectra = compute(* spaxels, scheduler='processes')
     spectra = np.asarray(spectra)
     ns = np.shape(spectra)
     ss = [spectra[:,:,i] for i in range(ns[2])]
-    return np.array(ss)
+    
+    # Using sequential algorithm
+    #ss = []
+    #for i in range(16):
+    #    slopes = fitSlopeSpax(data[:,:,i,:], telSim, off)
+    #    ss.append(slopes)
+    
+    #ss = np.array(ss)
+    print('ss shape ',np.shape(ss))
+    return ss
 
 def computeSpectra(files, telSim=False, off=False):
     from fifipy.io import readData
