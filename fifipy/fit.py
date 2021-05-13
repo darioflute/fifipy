@@ -219,13 +219,14 @@ def fitAllSlopes(data, telSim=False, off=False):
     #    ss.append(slopes)
     
     #ss = np.array(ss)
-    print('ss shape ',np.shape(ss))
-    return ss
+    #print('ss shape ',np.shape(ss))
+    return np.array(ss)
 
 def computeSpectra(files, telSim=False, off=False):
     from fifipy.io import readData
     
     n=len(files)
+    print('number of files ', n)
     specs = np.zeros((n,16,25))
     gpos = np.zeros(n)
     

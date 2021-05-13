@@ -31,8 +31,11 @@ def reduceData(rootdir, names=None, channels=['sw','lw']):
         names = np.arange(1,50)
     for channel in channels:
         for name in names:
-            filenames = '*_GC'+str(name)+'*'+channel+'.fits'
+            filenames = '*_GC'+str(name)+'-*'+channel+'.fits'
             files = sorted(gb(os.path.join(rootdir, '**', filenames), recursive=True))
+            filenames2 = '*_GC'+str(name)+'_?-*'+channel+'.fits'
+            files2 = sorted(gb(os.path.join(rootdir, '**', filenames2), recursive=True))
+            files += files2
             if len(files) > 0:
                 # Check sequence of grating positions
                 gratpos = [int(re.search('STRT_B-(.+?)_', file).group(1)) for file in files]
@@ -41,7 +44,7 @@ def reduceData(rootdir, names=None, channels=['sw','lw']):
                 mask = dgrat > np.nanmedian(dgrat)*3
                 # Break into pieces
                 if np.sum(mask) > 0:
-                    idx, = np.argwhere(dgrat > np.nanmedian(dgrat)*5)+1
+                    idx = np.argwhere(dgrat > np.nanmedian(dgrat)*5)[:,0]+1
                     idx = np.append(idx, len(files))
                 else:
                     idx = [len(files)]
@@ -514,7 +517,7 @@ def gratingModel1(p, gratpos, pixel, data):
     
     return model - data
 
-def gratingModel2(p, gratpos, pixel, data):
+def gratingModel2(p, gratpos, pixel, data, error=None):
     """
     Function to minimize to estimate the grating formula parameters
 
@@ -548,7 +551,10 @@ def gratingModel2(p, gratpos, pixel, data):
     beta = phi - gamma
     model = 1000. * g / order * (np.sin(alpha) + np.sin(beta))
     
-    return model - data
+    if error is None:
+        return model - data
+    else:
+        return (model - data) / error
 
 def dGratingModel1(p, gratpos, pixel, data):
     import numpy as np
@@ -659,10 +665,11 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
     None.
 
     """
-    from lmfit import Parameters, Minimizer
+    from lmfit import Parameters, Minimizer, minimize
     import numpy as np
     import pandas as pd
     import os
+    from fifipy.spectra import getResolution
     # Select a module
     g = []
     gamma = []
@@ -757,6 +764,15 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
         else:
             idx = module == j
         
+        if channel == 'R':
+            channelorder = 'R'
+        else:
+            if order == 1:
+                channelorder = 'B1'
+            else:
+                channelorder = 'B2'
+        
+        # Add error as R/lambda
         if np.sum(idx) > 6:
             if order == 1:
                 min1 = Minimizer(gratingModel1, fit_params, 
@@ -764,15 +780,15 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
                                  fcn_kws={'data': wavepos[idx]})
                 out = min1.leastsq(Dfun=dGratingModel1, col_deriv=True)
                 #out = minimize(gratingModel1, fit_params, 
-                #           args=(gratpos[idx], pixel[idx]), kws=kws, method='leastsq')
             else:
-                #kws = {'data': wavepos[idx]}
-                #out = minimize(gratingModel2, fit_params, 
-                #           args=(gratpos[idx], pixel[idx]), kws=kws, method='leastsq')
-                min2 = Minimizer(gratingModel2, fit_params, 
-                                 fcn_args=(gratpos[idx], pixel[idx]), 
-                                 fcn_kws={'data': wavepos[idx]})
-                out = min2.leastsq(Dfun=dGratingModel2, col_deriv=True)
+                R = getResolution(channelorder, wavepos[idx])
+                kws = {'data': wavepos[idx], 'error': wavepos[idx]/R}
+                out = minimize(gratingModel2, fit_params, 
+                           args=(gratpos[idx], pixel[idx]), kws=kws, method='leastsq')
+                #min2 = Minimizer(gratingModel2, fit_params, 
+                #                 fcn_args=(gratpos[idx], pixel[idx]), 
+                #                 fcn_kws={'data': wavepos[idx]})
+                #out = min2.leastsq(Dfun=dGratingModel2, col_deriv=True)
            
             outpar = out.params
             g.append(outpar['g'].value)
@@ -1005,8 +1021,10 @@ def fitISOFF(ISOFF, channel, dichroic, order):
     else:
         if order == 1:
             y += blue1
+            pass
         else:
             y += blue2
+            pass
 
     plt.plot(x, y,'o')
     plt.plot(x, ISOFF, '.')
@@ -1039,6 +1057,31 @@ def fitISOFF(ISOFF, channel, dichroic, order):
     print('ai = ',a)
     print('bi = ',b)
     print('ci = ',c)
+
+    isoff = a * slitPos**2 + b * slitPos + c
+    if channel == 'R':
+        if dichroic == '105':
+            isoff -= red105
+        else:
+            isoff -= red130
+        pass
+    else:
+        if order == 1:
+            isoff -= blue1
+            pass
+        else:
+            isoff -= blue2
+            pass
+
+    print("ISOFF = [", end='')
+    for i, isof in enumerate(isoff):
+        if i < 24:
+            if i % 4 == 0:
+                print('{0:.3f},'.format(isof))
+            else:
+                print('{0:.3f},'.format(isof),end='')
+        else:
+            print('{0:.3f}]'.format(isof))
 
     return a, b, c
 
@@ -1097,6 +1140,17 @@ def fitg(g):
     a = out.params['a'].value
     b = out.params['b'].value
     c = out.params['c'].value
+    
+    print('g = [')
+    for ii, sp in enumerate(slitPos):
+        if ii < 24:
+            if ii % 4 == 0:
+                print('{0:.8f},'.format(a*sp**2+b*sp+c))
+            else:
+                print('{0:.8f},'.format(a*sp**2+b*sp+c), end='')
+        else:
+            print('{0:.8f}]'.format(a*sp**2+b*sp+c))
+    
 #g = a*slitPos**2 + b*slitPos + c
 #print('central value ', -b/(2*a))
 #print('vertex ', c - b * b/ (4 *a))
@@ -1229,7 +1283,7 @@ def plotLines(rootdir, channel, order,i=8,j=12,files=None):
     plt.show()    
 
 
-def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, QS, QOFF, comparison=None):
+def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, QS, QOFF, ISOFF=None, comparison=None):
     import matplotlib.pyplot as plt
     from fifipy.wavecal import computeWavelength
     from fifipy.spectra import getResolution
@@ -1278,9 +1332,11 @@ def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, Q
              -6.88399816e+01, -1.68668733e-01,  1.23190431e+01,  3.38400050e+00,
               2.28956503e+02]
     if channelorder == 'B1':
-        ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue1
+        if ISOFF is None:
+            ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue1
     elif channelorder == 'B2':
-        ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue2
+        if ISOFF is None:
+            ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue2
     elif channelorder == 'R':
         if dichroic == '105':
             ISOFF = ai*slitPos**2 + bi*slitPos + ci - red105
@@ -1318,7 +1374,11 @@ def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, Q
             w_comp.append(w)
         w_comp = np.array(w_comp)
         R = np.array(resol)
-        plt.plot(wavepos[idx]+0.35, (w_comp-wavepos[idx])/(wavepos[idx]/R),'.',label='comp')
+        if channelorder == 'B2':
+            xshift = 0.15
+        else:
+            xshift = 0.35
+        plt.plot(wavepos[idx]+xshift, (w_comp-wavepos[idx])/(wavepos[idx]/R),'.',label='comp')
         plt.legend()
 
     plt.ylabel ( '$(1 - \lambda_{est}/\lambda )R$')
