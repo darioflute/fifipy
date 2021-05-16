@@ -481,7 +481,7 @@ def fitData(datafile, plot=True, multi=True):
 
 
                                   
-def gratingModel1(p, gratpos, pixel, data):
+def gratingModel1(p, gratpos, pixel, data, error=None):
     """
     Function to minimize to estimate the grating formula parameters
 
@@ -510,12 +510,15 @@ def gratingModel1(p, gratpos, pixel, data):
     phi = 2. * np.pi * (gratpos + ISOFF) / 2.0 ** 24
     sign = np.sign(pix - QOFF)
     delta = PS  * (pix - 8.5) + sign * QS * (pix - QOFF)**2
-    #delta = PS  * (pixel + 1 - 8.5) + QS * (pix - QOFF) ** 3
     alpha = phi + gamma + delta
     beta = phi - gamma
     model = 1000. * g * (np.sin(alpha) + np.sin(beta))
     
-    return model - data
+    if error is None:
+        return model - data
+    else:
+        return (model - data) / error
+
 
 def gratingModel2(p, gratpos, pixel, data, error=None):
     """
@@ -552,6 +555,7 @@ def gratingModel2(p, gratpos, pixel, data, error=None):
     model = 1000. * g / order * (np.sin(alpha) + np.sin(beta))
     
     if error is None:
+        return model - data
         return model - data
     else:
         return (model - data) / error
@@ -775,11 +779,15 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
         # Add error as R/lambda
         if np.sum(idx) > 6:
             if order == 1:
-                min1 = Minimizer(gratingModel1, fit_params, 
-                                 fcn_args=(gratpos[idx], pixel[idx]), 
-                                 fcn_kws={'data': wavepos[idx]})
-                out = min1.leastsq(Dfun=dGratingModel1, col_deriv=True)
-                #out = minimize(gratingModel1, fit_params, 
+                #min1 = Minimizer(gratingModel1, fit_params, 
+                #                 fcn_args=(gratpos[idx], pixel[idx]), 
+                #                 fcn_kws={'data': wavepos[idx]})
+                #out = min1.leastsq(Dfun=dGratingModel1, col_deriv=True)
+                R = getResolution(channelorder, wavepos[idx])
+                kws = {'data': wavepos[idx], 'error': wavepos[idx]/R}
+                kws = {'data': wavepos[idx]}
+                out = minimize(gratingModel1, fit_params, 
+                               args=(gratpos[idx], pixel[idx]), kws=kws, method='leastsq')
             else:
                 R = getResolution(channelorder, wavepos[idx])
                 kws = {'data': wavepos[idx], 'error': wavepos[idx]/R}
@@ -813,6 +821,294 @@ def computeWavCal(pixel, module, wavepos, gratpos, channel, order,
     QS = np.array(QS)
     
     return g,gamma,QOFF, PS,QS, ISOFF
+
+def gratingModelR105(p, gratpos, pixel, module, data, error=None):
+    """
+    Function to minimize to estimate the grating formula parameters
+
+    Parameters
+    ----------
+    p : TYPE
+        DESCRIPTION.
+    xdata : TYPE  tuple
+        DESCRIPTION. Contains grating position, pixel, module, and order
+    data : TYPE
+        DESCRIPTION. Expected wavelengths
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION. Difference between modeled and expected wavelength
+
+    """
+    import numpy as np
+    # Parameters
+    ai,bi,ci = p['ai'],p['bi'],p['ci']
+    g0, NP, a = p['g0'], p['NP'], p['a']
+    PS, QOFF, QS = p['PS'], p['QOFF'], p['QS']
+    pix = pixel + 1
+    slitPos = 25 - 6 * (module // 5) + module % 5
+    gamma=0.0167200
+    red105 = np.array( [ -7.82734595,    6.48103643,   15.37344189,   47.39558183,   54.25017651,
+              -87.78073561,  -57.87672198,  -57.02387395,  -30.75647953,  -82.13171852,
+               38.17407445,   53.9293801 ,   62.15816713,   82.60265586,  -51.04419029,
+               -6.0626937,   36.28682384,   42.49162215,   70.33355788, -148.78530207,
+              -52.04256692 , -29.12922045,   -4.73520485,   20.72545992, -268.51481606])
+    
+    g = g0 * (1 - 0.5 * ((slitPos - NP)/a)**2)
+    ISOFF = ai * slitPos**2 + bi * slitPos + ci - red105[module]
+    # Model (Add one to pixel, since they are counted 1,16)
+    phi = 2. * np.pi * (gratpos + ISOFF) / 2.0 ** 24
+    sign = np.sign(pix - QOFF)
+    delta = PS  * (pix - 8.5) + sign * QS * (pix - QOFF)**2
+    alpha = phi + gamma + delta
+    beta = phi - gamma
+    model = 1000. * g * (np.sin(alpha) + np.sin(beta))
+    
+    if error is None:
+        return model - data
+    else:
+        return (model - data) / error
+    
+def gratingModelR130(p, gratpos, pixel, module, data, error=None):
+    """
+    Function to minimize to estimate the grating formula parameters
+
+    Parameters
+    ----------
+    p : TYPE
+        DESCRIPTION.
+    xdata : TYPE  tuple
+        DESCRIPTION. Contains grating position, pixel, module, and order
+    data : TYPE
+        DESCRIPTION. Expected wavelengths
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION. Difference between modeled and expected wavelength
+
+    """
+    import numpy as np
+    # Parameters
+    ai,bi,ci = p['ai'],p['bi'],p['ci']
+    g0, NP, a = p['g0'], p['NP'], p['a']
+    PS, QOFF, QS = p['PS'], p['QOFF'], p['QS']
+    pix = pixel + 1
+    slitPos = 25 - 6 * (module // 5) + module % 5
+    gamma=0.0167200
+    red130 = np.array([ -12.70859072,    7.50024661,   18.53167461,   41.46400465,   52.7757175,
+              -95.78015715,  -56.53938436,  -54.24399594,  -33.75992799,  -68.99733959,
+               31.27967525,   53.60554151,   58.10103624,   71.69960587,  -22.11761283,
+               -4.64846212 ,  38.77585613,   42.34325365,   60.40053434, -118.02749666,
+              -47.8753654 ,  -24.45939546,   -4.54977914,    8.74871326, -223.38722927])
+    
+    g = g0 * (1 - 0.5 * ((slitPos - NP)/a)**2)
+    ISOFF = ai * slitPos**2 + bi * slitPos + ci - red130[module]
+    # Model (Add one to pixel, since they are counted 1,16)
+    phi = 2. * np.pi * (gratpos + ISOFF) / 2.0 ** 24
+    sign = np.sign(pix - QOFF)
+    delta = PS  * (pix - 8.5) + sign * QS * (pix - QOFF)**2
+    alpha = phi + gamma + delta
+    beta = phi - gamma
+    model = 1000. * g * (np.sin(alpha) + np.sin(beta))
+    
+    if error is None:
+        return model - data
+    else:
+        return (model - data) / error
+    
+def gratingModelB1(p, gratpos, pixel, module, data, error=None):
+    """
+    Function to minimize to estimate the grating formula parameters
+
+    Parameters
+    ----------
+    p : TYPE
+        DESCRIPTION.
+    xdata : TYPE  tuple
+        DESCRIPTION. Contains grating position, pixel, module, and order
+    data : TYPE
+        DESCRIPTION. Expected wavelengths
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION. Difference between modeled and expected wavelength
+
+    """
+    import numpy as np
+    # Parameters
+    ai,bi,ci = p['ai'],p['bi'],p['ci']
+    g0, NP, a = p['g0'], p['NP'], p['a']
+    PS, QOFF, QS = p['PS'], p['QOFF'], p['QS']
+    pix = pixel + 1
+    slitPos = 25 - 6 * (module // 5) + module % 5
+    gamma=0.0089008
+    blue1 = np.array([-263.92944121,  -53.59084654,    1.16697799,   51.19513828,  422.65026353,
+             -189.63033763,  -33.17725668,  -19.96267952,   26.01302266,  307.31828786,
+             -156.31979898,  -37.76920495,   14.25657713,    9.02851029,  216.42404114,
+              -75.57154681,   28.56399698,   33.54483603,   24.91445915,  215.17805003,
+             -108.48468372,  -12.59286879,    6.90170244,  -10.74710888,  175.93175233])
+    
+    g = g0 * (1 - 0.5 * ((slitPos - NP)/a)**2)
+    ISOFF = ai * slitPos**2 + bi * slitPos + ci - blue1[module]
+    # Model (Add one to pixel, since they are counted 1,16)
+    phi = 2. * np.pi * (gratpos + ISOFF) / 2.0 ** 24
+    sign = np.sign(pix - QOFF)
+    delta = PS  * (pix - 8.5) + sign * QS * (pix - QOFF)**2
+    alpha = phi + gamma + delta
+    beta = phi - gamma
+    model = 1000. * g * (np.sin(alpha) + np.sin(beta))
+    
+    if error is None:
+        return model - data
+    else:
+        return (model - data) / error
+    
+def gratingModelB2(p, gratpos, pixel, module, data, error=None):
+    """
+    Function to minimize to estimate the grating formula parameters
+
+    Parameters
+    ----------
+    p : TYPE
+        DESCRIPTION.
+    xdata : TYPE  tuple
+        DESCRIPTION. Contains grating position, pixel, module, and order
+    data : TYPE
+        DESCRIPTION. Expected wavelengths
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION. Difference between modeled and expected wavelength
+
+    """
+    import numpy as np
+    # Parameters
+    ai,bi,ci = p['ai'],p['bi'],p['ci']
+    g0, NP, a = p['g0'], p['NP'], p['a']
+    PS, QOFF, QS = p['PS'], p['QOFF'], p['QS']
+    pix = pixel + 1
+    slitPos = 25 - 6 * (module // 5) + module % 5
+    gamma=0.0089008
+    blue2 = np.array([-1.80111492e+02, -4.09611668e+01,  1.78797557e-02,  5.33911505e+01,
+              4.51898768e+02, -1.28648267e+02, -3.41402874e+01, -2.58367960e+01,
+              1.51806221e+01,  3.40600043e+02, -1.00297089e+02, -2.52445624e+01,
+              4.35994998e+00,  3.34233424e+00,  2.48134145e+02, -3.43214702e+01,
+              2.64531668e+01,  2.99021981e+01,  4.11197888e+01,  2.59380351e+02,
+             -6.88399816e+01, -1.68668733e-01,  1.23190431e+01,  3.38400050e+00,
+              2.28956503e+02])
+    
+    g = g0 * (1 - 0.5 * ((slitPos - NP)/a)**2)
+    ISOFF = ai * slitPos**2 + bi * slitPos + ci - blue2[module]
+    # Model (Add one to pixel, since they are counted 1,16)
+    phi = 2. * np.pi * (gratpos + ISOFF) / 2.0 ** 24
+    sign = np.sign(pix - QOFF)
+    delta = PS  * (pix - 8.5) + sign * QS * (pix - QOFF)**2
+    alpha = phi + gamma + delta
+    beta = phi - gamma
+    model = 1000. * g/2. * (np.sin(alpha) + np.sin(beta))
+    
+    if error is None:
+        return model - data
+    else:
+        return (model - data) / error
+    
+def computeWavCalTot(pixel, module, wavepos, gratpos, channel, order, dichroic):
+    from lmfit import Parameters, Minimizer, minimize
+    import numpy as np
+    import pandas as pd
+    import os
+    from fifipy.spectra import getResolution
+    
+    path0, file0 = os.path.split(__file__)
+
+    if channel == 'R':
+        deadpixelfile = os.path.join(path0, 'data', 'deadRED.csv')
+        channelorder = 'R'
+        g0 =  0.11716182038086806
+        NP =  14.20296497802675
+        a  =  422.5360507587561
+        ai =  6.416939412313303
+        bi =  -162.00403731250026
+        ci =  1150612.1286321995
+        PS = 0.0006
+        QOFF = 8.5
+        QS = 1.6e-06
+    else:
+        deadpixelfile = os.path.join(path0, 'data', 'deadBLUE.csv')
+        PS = 0.0006
+        QOFF = 8.5
+        QS = 9.5e-06
+        g0 =  0.1171490870070836
+        NP =  14.355714704737624
+        a  =  426.73530005633415
+        ai =  6.228562535851191
+        bi =  -157.68826192900738
+        ci =  1150951.9213831278
+        if order == 1:
+            channelorder = 'B1'
+        else:
+            channelorder = 'B2'
+
+    fit_params = Parameters()
+    fit_params.add('g0', value=g0)
+    fit_params.add('NP', value=NP)
+    fit_params.add('a', value=a)
+    fit_params.add('ai', value=ai)
+    fit_params.add('bi', value=bi)
+    fit_params.add('ci', value=ci)
+    fit_params.add('PS', value=PS)
+    fit_params.add('QOFF', value=QOFF)
+    fit_params.add('QS', value=QS)
+    
+    
+
+    dead = pd.read_csv(deadpixelfile, delimiter=',',header=0,
+                    names=['spaxel','spexel'])      
+    spaxels = dead.spaxel.values
+    spexels = dead.spexel.values
+    idx = module < 0
+    for i,j in zip(spaxels, spexels):
+        idx |= (module == i) & (pixel == j) 
+    idx = ~idx
+    
+    
+    R = getResolution(channelorder, wavepos[idx])
+    kws = {'data': wavepos[idx], 'error': wavepos[idx]/R}
+    if (channel == 'R') & (dichroic == 105):
+        out = minimize(gratingModelR105, fit_params, 
+                          args=(gratpos[idx], pixel[idx], module[idx]),
+                          kws=kws, method='leastsq')
+    elif (channel == 'R') & (dichroic == 130):
+        out = minimize(gratingModelR130, fit_params, 
+                          args=(gratpos[idx], pixel[idx], module[idx]),
+                          kws=kws, method='leastsq')
+    elif (channel == 'B') & (order == 1):
+        out = minimize(gratingModelB1, fit_params, 
+                          args=(gratpos[idx], pixel[idx], module[idx]),
+                          kws=kws, method='leastsq')
+    elif (channel == 'B') & (order == 2):
+        out = minimize(gratingModelB2, fit_params, 
+                          args=(gratpos[idx], pixel[idx], module[idx]),
+                          kws=kws, method='leastsq')
+    else:
+        print('This case is not contemplated')
+    outpar = out.params
+    g0 = outpar['g0'].value
+    NP = outpar['NP'].value
+    a = outpar['a'].value
+    ai = outpar['ai'].value
+    bi = outpar['bi'].value
+    ci = outpar['ci'].value
+    PS = outpar['PS'].value
+    QOFF = outpar['QOFF'].value
+    QS = outpar['QS'].value
+    
+    return g0,NP,a,ai,bi,ci,PS,QOFF,QS
+
 
 def computeWavelength(spexel, spaxel, order, coeffs, gratpos):
     """
@@ -1121,7 +1417,7 @@ def fitg(g):
     plt.title('g')
 
     # Reject outliers 
-    for k in range(3):
+    for k in range(10):
         res = y - (a*x**2+b*x+c)
         med = np.nanmedian(res)
         mad = np.nanmedian(np.abs(res - med))
@@ -1133,6 +1429,7 @@ def fitg(g):
         y = y[id3]
         plt.plot(x,y,'x',color='red')
         plt.plot(x_, a*x_**2+b*x_+c, color='red')
+        print('g0 ', c - b**2/(4*a))
     #print(out.params)
     plt.title('g')
     plt.show()
@@ -1331,17 +1628,16 @@ def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, Q
               2.64531668e+01,  2.99021981e+01,  4.11197888e+01,  2.59380351e+02,
              -6.88399816e+01, -1.68668733e-01,  1.23190431e+01,  3.38400050e+00,
               2.28956503e+02]
-    if channelorder == 'B1':
-        if ISOFF is None:
-            ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue1
-    elif channelorder == 'B2':
-        if ISOFF is None:
-            ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue2
-    elif channelorder == 'R':
-        if dichroic == '105':
-            ISOFF = ai*slitPos**2 + bi*slitPos + ci - red105
-        else:
-            ISOFF = ai*slitPos**2 + bi*slitPos + ci - red130
+    if ISOFF is None:
+        if channelorder == 'B1':
+                ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue1
+        elif channelorder == 'B2':
+                ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue2
+        elif channelorder == 'R':
+            if dichroic == '105':
+                ISOFF = ai*slitPos**2 + bi*slitPos + ci - red105
+            else:
+                ISOFF = ai*slitPos**2 + bi*slitPos + ci - red130
            
     if channelorder == 'R':
         gamma = 0.0167200
@@ -1353,16 +1649,22 @@ def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, Q
     
     w_est = []
     resol = []
+    modul = []
     idx = (gratamp > 100) & (gerrpos < 100) & (waveok ==1)
     for pix, mo, gp, wp in zip(pixel[idx], modules[idx], gratpos[idx], wavepos[idx]):
         w,dw = computeWavelength(pix, mo, order, coeffs, gp)
         resol.append(getResolution(channelorder, wp))
         w_est.append(w)
+        modul.append(mo)
     w_est = np.array(w_est)
     R = np.array(resol)
+    modul = np.array(modul)
     
     fig,ax = plt.subplots(figsize=(14,6))
-    plt.plot(wavepos[idx],(w_est-wavepos[idx])/(wavepos[idx]/R),'.')
+    waveposx = wavepos[idx]
+    for i in range(25):
+        mi = modul == i
+        plt.plot(waveposx[mi],(1 - w_est[mi]/waveposx[mi])*R[mi],'.')
 
     if comparison is not None:
         w_comp = []
@@ -1378,10 +1680,14 @@ def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, Q
             xshift = 0.15
         else:
             xshift = 0.35
-        plt.plot(wavepos[idx]+xshift, (w_comp-wavepos[idx])/(wavepos[idx]/R),'.',label='comp')
+        plt.plot(wavepos[idx]+xshift, (1-w_comp/wavepos[idx])*R,'.',label='comp')
         plt.legend()
 
     plt.ylabel ( '$(1 - \lambda_{est}/\lambda )R$')
     plt.ylim(-0.3,0.3)
+    plt.grid()
+    plt.show()
+    fig,ax = plt.subplots(figsize=(14,6))
+    plt.plot(wavepos[idx], w_est/wavepos[idx],'.')
     plt.grid()
     plt.show()

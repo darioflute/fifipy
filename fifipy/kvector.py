@@ -675,43 +675,52 @@ def computeDeltaVector(infile, comparison = None):
         
     channel = header['CHANNEL']
     dichroic = header['DICHROIC']
-    grat = np.unique(grating)
+    grats = np.unique(grating)
     kmir = np.unique(kmirror)
 
-    ng = len(grat)
-    x0 = np.zeros(ng)
-    y0 = np.zeros(ng)
-    r  = np.zeros(ng)
-    alpha = np.zeros(ng)
+    ng = len(grats)
+    #x0 = np.zeros(ng)
+    #y0 = np.zeros(ng)
+    r  = []
+    alpha = []
+    grat = []
 
+    print('   Rotation       Grating')
+    print('Planned Achieved')
     alphak = (kmir[0] - 52) * 0.0871
-
-    print('K-mirror rotation')
-    print('command measure')
     for i in range(ng):
-        id1 = (kmirror == kmir[0]) & (grating == grat[i])
-        id2 = (kmirror == kmir[1]) & (grating == grat[i])
-        x1, y1 = np.reshape(xcen[id1,:],25), np.reshape(ycen[id1,:],25)
-        x2, y2 =  np.reshape(xcen[id2,:],25),  np.reshape(ycen[id2,:],25)
-        if channel == 'B':
-            idx = np.array([7,8,9,12,13,14,17,18,19])
-            rotation_achieved = - np.arctan2(y1[13]-y1[11],x1[13]-x1[11]) * 180/np.pi
-        else:
-            idx = np.array([12,13,14])
-            rotation_achieved = 180 - np.arctan2(y1[13]-y1[11],x1[13]-x1[11]) * 180/np.pi
-        x0[i] = biweightLocation(0.5*(x1[idx-1]+x2[idx-1]))
-        y0[i] = biweightLocation(0.5*(y1[idx-1]+y2[idx-1]))
-        dx = x1[12] - x0[i]
-        dy = y1[12] - y0[i]
-        #alpha[i] = - alphak - np.arctan2(dy, dx) * 180/np.pi
-        print('{0:.3f} {1:.3f}'.format(alphak, rotation_achieved))
-        alpha[i] = -rotation_achieved - np.arctan2(dy, dx) * 180/np.pi
-        r[i] = np.sqrt((x1[12] - x0[i])**2+ (y1[12] - y0[i])**2)
-
-    if channel == 'B':
-        order = np.array([2,2,2,1,1,1,2])
-        id2 = order == 2
-        id1 = order == 1
+        id1 = (kmirror == kmir[0]) & (grating == grats[i])
+        id2 = (kmirror == kmir[1]) & (grating == grats[i])
+        # If more than one measurement, 
+        ids1 = np.argwhere(id1 == True)
+        ids2 = np.argwhere(id2 == True)
+        ids1 = ids1[:,0]
+        ids2 = ids2[:,0]
+        for id1, id2 in zip(ids1, ids2):
+            x1, y1 = np.reshape(xcen[id1,:],25), np.reshape(ycen[id1,:],25)
+            x2, y2 =  np.reshape(xcen[id2,:],25),  np.reshape(ycen[id2,:],25)
+            if channel == 'B':
+                idx = np.array([7,8,9,12,13,14,17,18,19])
+                rotation_achieved = - np.arctan2(y1[13]-y1[11],x1[13]-x1[11]) * 180/np.pi
+            else:
+                idx = np.array([12,13,14])
+                rotation_achieved = 180 - np.arctan2(y1[13]-y1[11],x1[13]-x1[11]) * 180/np.pi
+            x0 = biweightLocation(0.5*(x1[idx-1]+x2[idx-1]))
+            y0 = biweightLocation(0.5*(y1[idx-1]+y2[idx-1]))
+            dx = x1[12] - x0
+            dy = y1[12] - y0
+            print('{0:.3f} {1:.3f} {2:.0f}'.format(alphak, rotation_achieved, grats[i]))
+            alpha.append(-rotation_achieved - np.arctan2(dy, dx) * 180/np.pi)
+            r.append(np.sqrt((x1[12] - x0)**2+ (y1[12] - y0)**2))
+            grat.append(grats[i])
+    
+    alpha = np.array(alpha)
+    r = np.array(r)
+    grat = np.array(grat)
+    #if channel == 'B':
+    #    order = np.array([2,2,2,1,1,1,2])
+    #    id2 = order == 2
+    #    id1 = order == 1
     
     # Previous results (from Sebastian - Aug 2020)
     if comparison is None:
@@ -736,17 +745,19 @@ def computeDeltaVector(infile, comparison = None):
     if channel == 'R':
         ax1.plot(grat, r, 'o', color='red')
     else:
-        ax1.plot(grat[id1], r[id1], 'o',color='red', label='order 1')
-        ax1.plot(grat[id2], r[id2], 'o',color='blue', label='order 2')
-        ax1.legend()
+        ax1.plot(grat, r, 'o', color='blue')
+        #ax1.plot(grat[id1], r[id1], 'o',color='red', label='order 1')
+        #ax1.plot(grat[id2], r[id2], 'o',color='blue', label='order 2')
+        #ax1.legend()
     ax1.grid()
     ax1.set_title('R')
     if channel == 'R':
         ax2.plot(grat, alpha, 'o', color='red')
     else:
-        ax2.plot(grat[id1], alpha[id1], 'o',color='red', label='order 1')
-        ax2.plot(grat[id2], alpha[id2], 'o',color='blue', label='order 2')
-        ax2.legend()
+        ax2.plot(grat, alpha, 'o', color='blue')
+        #ax2.plot(grat[id1], alpha[id1], 'o',color='red', label='order 1')
+        #ax2.plot(grat[id2], alpha[id2], 'o',color='blue', label='order 2')
+        #ax2.legend()
     ax2.grid()
     ax2.set_title('$\\alpha_0$')
     plt.show()
@@ -767,8 +778,9 @@ def computeDeltaVector(infile, comparison = None):
     if channel == 'R':
         ax1.plot(grat, dx, 'o')
     else:
-        ax1.plot(grat[id1], dx[id1], 'o',color='red', label='order 1')
-        ax1.plot(grat[id2], dx[id2], 'o',color='blue', label='order 2')
+        ax1.plot(grat, dx, 'o')
+        #ax1.plot(grat[id1], dx[id1], 'o',color='red', label='order 1')
+        #ax1.plot(grat[id2], dx[id2], 'o',color='blue', label='order 2')
         
     ax1.plot(grat, bx_ + ax_ * grat, label='Sebastian')
     ax1.plot(grat, out.best_fit, label='Dario')
@@ -777,7 +789,7 @@ def computeDeltaVector(infile, comparison = None):
     if channel == 'R':
         ax1.set_ylim(-1.5,-0.5)
     else:
-        ax1.set_ylim(-0.4,1.6)
+        ax1.set_ylim(-0.4,2.5)
     ax1.set_ylabel('$\Delta$x [mm]')
     ax1.set_xlabel('Grating position [ISU]')
     ax1.legend()
@@ -793,8 +805,9 @@ def computeDeltaVector(infile, comparison = None):
     if channel == 'R':
         ax2.plot(grat, dy, 'o')
     else:
-        ax2.plot(grat[id1], dy[id1], 'o',color='red', label='order 1')
-        ax2.plot(grat[id2], dy[id2], 'o',color='blue', label='order 2')
+        ax2.plot(grat, dy, 'o')
+        #ax2.plot(grat[id1], dy[id1], 'o',color='red', label='order 1')
+        #ax2.plot(grat[id2], dy[id2], 'o',color='blue', label='order 2')
     ax2.plot(grat, by_ + ay_ * grat, label='Sebastian')
     ax2.plot(grat, out.best_fit, label='Dario')
     ax2.grid()
