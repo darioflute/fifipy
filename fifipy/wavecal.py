@@ -1664,7 +1664,7 @@ def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, Q
     waveposx = wavepos[idx]
     for i in range(25):
         mi = modul == i
-        plt.plot(waveposx[mi],(1 - w_est[mi]/waveposx[mi])*R[mi],'.')
+        plt.plot(waveposx[mi],(1 - w_est[mi]/waveposx[mi])*R[mi],'.',color='skyblue')
 
     if comparison is not None:
         w_comp = []
@@ -1680,14 +1680,101 @@ def plotQualityFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, Q
             xshift = 0.15
         else:
             xshift = 0.35
-        plt.plot(wavepos[idx]+xshift, (1-w_comp/wavepos[idx])*R,'.',label='comp')
+        plt.plot(wavepos[idx]+xshift, (1-w_comp/wavepos[idx])*R,'.',label='comp',color='orange')
         plt.legend()
+
+        
 
     plt.ylabel ( '$(1 - \lambda_{est}/\lambda )R$')
     plt.ylim(-0.3,0.3)
     plt.grid()
     plt.show()
+    if comparison is not None:
+        fig,ax = plt.subplots(figsize=(14,6))
+        plt.plot(wavepos[idx], (w_est-w_comp)/wavepos[idx]*R,'.',color='skyblue')
+        #plt.plot(w_comp, (w_est-w_comp)/w_comp*R,'.',color='skyblue')
+        plt.ylabel('$(\lambda_{est}-\lambda_{comp})R/\lambda$')
+        plt.grid()
+        plt.show()
+
+def plotComparisonFit(rootdir, channelorder, dichroic, g0, NP, a, ai, bi, ci, PS, QS, QOFF, ISOFF=None, comparison=None):
+    import matplotlib.pyplot as plt
+    from fifipy.wavecal import computeWavelength
+    from fifipy.spectra import getResolution
+    import numpy as np
+    from fifipy.wavecal import selectFiles
+        
+    if channelorder == 'R':
+        channel = 'R'
+        order = 1
+    elif channelorder == 'B1':
+        channel = 'B'
+        order = 1
+    elif channelorder == 'B2':
+        channel = 'B'
+        order = 2
+    else:
+        print(channelorder ,' is an invalid channelorder')
+        return
+    
+    modules, pixel, wavepos, gerrpos, gratpos, gratamp, waveok, nfile = selectFiles(rootdir,channel,order,dichroic)
+    module = np.arange(25)
+    slitPos = 25 - 6 * (module // 5) + module % 5
+    red105 = [ -7.82734595,    6.48103643,   15.37344189,   47.39558183,   54.25017651,
+              -87.78073561,  -57.87672198,  -57.02387395,  -30.75647953,  -82.13171852,
+               38.17407445,   53.9293801 ,   62.15816713,   82.60265586,  -51.04419029,
+               -6.0626937,   36.28682384,   42.49162215,   70.33355788, -148.78530207,
+              -52.04256692 , -29.12922045,   -4.73520485,   20.72545992, -268.51481606]
+    
+    red130 = [ -12.70859072,    7.50024661,   18.53167461,   41.46400465,   52.7757175,
+              -95.78015715,  -56.53938436,  -54.24399594,  -33.75992799,  -68.99733959,
+               31.27967525,   53.60554151,   58.10103624,   71.69960587,  -22.11761283,
+               -4.64846212 ,  38.77585613,   42.34325365,   60.40053434, -118.02749666,
+              -47.8753654 ,  -24.45939546,   -4.54977914,    8.74871326, -223.38722927]
+    
+    blue1 = [-263.92944121,  -53.59084654,    1.16697799,   51.19513828,  422.65026353,
+             -189.63033763,  -33.17725668,  -19.96267952,   26.01302266,  307.31828786,
+             -156.31979898,  -37.76920495,   14.25657713,    9.02851029,  216.42404114,
+              -75.57154681,   28.56399698,   33.54483603,   24.91445915,  215.17805003,
+             -108.48468372,  -12.59286879,    6.90170244,  -10.74710888,  175.93175233]
+    
+    blue2 = [-1.80111492e+02, -4.09611668e+01,  1.78797557e-02,  5.33911505e+01,
+              4.51898768e+02, -1.28648267e+02, -3.41402874e+01, -2.58367960e+01,
+              1.51806221e+01,  3.40600043e+02, -1.00297089e+02, -2.52445624e+01,
+              4.35994998e+00,  3.34233424e+00,  2.48134145e+02, -3.43214702e+01,
+              2.64531668e+01,  2.99021981e+01,  4.11197888e+01,  2.59380351e+02,
+             -6.88399816e+01, -1.68668733e-01,  1.23190431e+01,  3.38400050e+00,
+              2.28956503e+02]
+    if ISOFF is None:
+        if channelorder == 'B1':
+                ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue1
+        elif channelorder == 'B2':
+                ISOFF = ai*slitPos**2 + bi*slitPos + ci - blue2
+        elif channelorder == 'R':
+            if dichroic == '105':
+                ISOFF = ai*slitPos**2 + bi*slitPos + ci - red105
+            else:
+                ISOFF = ai*slitPos**2 + bi*slitPos + ci - red130
+           
+    if channelorder == 'R':
+        gamma = 0.0167200
+    else:
+        gamma = 0.0089008
+
+    ISF=1
+    coeffs = [g0, NP, a, ISF, gamma, PS, QOFF, QS, ISOFF]
+        
     fig,ax = plt.subplots(figsize=(14,6))
-    plt.plot(wavepos[idx], w_est/wavepos[idx],'.')
+    gratpos = np.arange(90000,2000000,2000)
+    for mo in range(25):
+        for pix in range(16):
+            w,dw = computeWavelength(pix, mo, order, coeffs, gratpos)
+            wc,dwc = computeWavelength(pix, mo, order, comparison, gratpos)
+            resol = getResolution(channelorder, w)
+            plt.plot(w, (1-wc/w)*resol)
+    
+    plt.ylabel('$(1 - \lambda_{comp}/\lambda) R$')
+    #plt.ylim(-0.01,0.01)
     plt.grid()
     plt.show()
+
