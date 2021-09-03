@@ -369,7 +369,7 @@ class Spectrum(object):
                     nt = len(wt)
                     try:
                         e2 = nt / (nt-1) * np.nansum((wt * (fi - f0))**2) / w1**2                    
-                        e0 = np.sqrt(e2 / areafactor)
+                        e0 = np.sqrt(e2) #/ areafactor)
                     except:
                         e0 = np.nan
                     #e2 = np.nansum((nt*wt*fi/wtsum - f0)**2)/(nt-1)
@@ -486,7 +486,7 @@ def filterSpectrum(wave, w, f, d, delta, radius, areafactor):
                     nt = len(wt)
                     try:
                         e2 = nt / (nt-1) * np.nansum((wt * (fi - f0))**2) / w1**2                    
-                        e0 = np.sqrt(e2 / areafactor)
+                        e0 = np.sqrt(e2)# / areafactor)
                     except:
                         e0= np.nan
                 else:
