@@ -475,7 +475,13 @@ class ImageCanvas(MplCanvas):
         #print(xy0)
         #x0 = xy0[:,0]/self.pixscale
         #y0 = xy0[:,1]/self.pixscale
-        self.axes.scatter(xy[:,0], xy[:,1], s=5, color='blue',transform=self.axes.get_transform('fk5'))
+        # Check flights
+        flight = xy[:,2]
+        flights = np.unique(flight)
+        
+        for f in flights:
+            idf = flight == f
+            self.axes.scatter(xy[idf,0], xy[idf,1], s=5, transform=self.axes.get_transform('fk5'),label=str(int(f)))
         # Cursor data format
         def format_coord(x,y):
             """ Redefine how to show the coordinates """
@@ -489,6 +495,7 @@ class ImageCanvas(MplCanvas):
             yy = radec.dec.to_string(sep=':',precision=0)
             return '{:s} {:s} ({:4.0f},{:4.0f})'.format(xx,yy,x,y)
         
+        self.axes.legend()
         self.axes.format_coord = format_coord
         self.draw_idle()
         
@@ -541,8 +548,36 @@ class SpectrumCanvas(MplCanvas):
         s = self.spectrum
         nmedian = np.nanmedian(s.nflux)
         idx = s.nflux > (nmedian * 0.5)
-        self.ax1.scatter(s.w, s.f,  s=2, color=s.colors)
-        self.ax1.scatter(s.wrejected, s.frejected, s=4, color='red')
+        wmin = np.nanmin(s.wave[idx])
+        wmax = np.nanmax(s.wave[idx])
+        wrange = (wmax - wmin) / 6.
+        wmid = (wmin+wmax)*0.5
+        
+        # self.ax1.scatter(s.w, s.f,  s=2, color=s.colors)
+        flights = np.unique(s.flight)
+        for f in flights:
+            idf = s.flight == f
+            if np.sum(idf) > 0:
+                ssc = self.ax1.scatter(s.w[idf], s.f[idf],  s=2, label=str(int(f)))
+                color = ssc.get_facecolors()[0]
+                sw = s.w[idf]
+                sf = s.f[idf]
+                medsf = s.baseline
+                madsf = s.m1
+                idf = (np.abs(sf - medsf) < 3 * madsf) & (sw > wmin) & (sw < wmax) & (np.abs(sw - wmid) > wrange)
+                sf = sf[idf]
+                #sw = sw[idf]
+                medsf = np.nanmedian(sf)
+                #madsf = np.nanmedian(np.abs(sf - medsf))
+                #swmin = np.nanmin(sw)
+                #swmax = np.nanmax(sw)
+                #swrange = (swmax - swmin) / 3.
+                #print('wavelengths ', swmin+swrange, swmin+2*swrange)
+                #idf = (sw < swmin+swrange) | (sw > swmin+2*swrange)
+                self.ax2.axhline(medsf, label=str(int(f)), color=color)
+        self.ax1.legend()
+        #self.ax1.scatter(s.wrejected, s.frejected, marker='x', s=4, mfc='None')
+        self.ax1.plot(s.wrejected, s.frejected, 'o', color='black', ms=6, ls='None', mfc='None')
         self.ax1.axhline(s.baseline, color='lime')
         try:
             self.ax1.axhline(s.baseline - 4 * s.m1, color='lime')
@@ -554,7 +589,7 @@ class SpectrumCanvas(MplCanvas):
             ax.fill_between(s.wave[idx], s.fflux[idx]-s.noise[idx], s.fflux[idx]+s.noise[idx], color='green', alpha=0.2)
             ax.fill_between(s.wave[idx], s.flux[idx]-s.eflux[idx], s.flux[idx]+s.eflux[idx], color='blue', alpha=0.2)
             ax.plot(s.wave[idx], s.flux[idx], color='blue', label='Pipeline Cube')
-            ax.plot(s.wave[idx], s.fflux[idx], color='green', label='Biweight filter')  
+            ax.plot(s.wave[idx], s.fflux[idx], color='green', label='This program')  
             ax.plot(s.wave[~idx], s.flux[~idx], color='blue', alpha=0.3)
             ax.plot(s.wave[~idx], s.fflux[~idx], color='green', alpha=0.3)
         outliers = len(s.frejected)

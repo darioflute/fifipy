@@ -69,12 +69,12 @@ class GUI (QMainWindow):
         self.spectralPanel.layout.addWidget(self.sc)
         
     def createMenu(self):
-        
         bar = self.menuBar()
         file = bar.addMenu("File")
-        file.addAction(QAction("Quit",self,shortcut='Ctrl+q',triggered=self.fileQuit))
-        file.addAction(QAction("Open cube",self,shortcut='Ctrl+n',triggered=self.newFile))
-        file.addAction(QAction("Compute new uncertainty",self,shortcut='Ctrl+n',triggered=self.newUncertainty))
+        file.addAction(QAction("Quit", self, shortcut='Ctrl+q', triggered=self.fileQuit))
+        file.addAction(QAction("Open cube", self, shortcut='Ctrl+n', triggered=self.newFile))
+        file.addAction(QAction("Compute new cube", self, shortcut='Ctrl+n', triggered=self.newUncertainty))
+        file.addAction(QAction("Compute continuum subtracted cube", self, shortcut='Ctrl+n', triggered=self.newContSubtracted))
         bar.setNativeMenuBar(False)
 
     def fileQuit(self):
@@ -128,7 +128,7 @@ class GUI (QMainWindow):
         #image = np.nanmean(s.flux, axis=0)
         image = s.flux[s.n0,:,:]
         #xy = np.array([[x_, y_] for x_, y_ in zip(sc.x, sc.y)], dtype=np.float64)
-        xy = np.column_stack((sc.x, sc.y))
+        xy = np.column_stack((sc.x, sc.y, sc.flight))
         #xy = np.array([sc.x, sc.y], np.float_)
         self.ic.compute_initial_figure(image, s.wcs, xy)
         pass
@@ -279,13 +279,14 @@ class GUI (QMainWindow):
                 idx = distance <= radius
                 dists = distance[idx]
                 w = sc.w[idx]
-                f = sc.f[idx]        
+                f = sc.f[idx] 
+                fl = sc.flight[idx]
                 # Choose closest grid point for specCube
                 pdistance = np.hypot(s.points[:,0] - xc, s.points[:,1] - yc)
                 imin = np.argmin(pdistance)
                 flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
                 eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
-                self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, dists, s.wt, 
+                self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, fl, dists, s.wt, 
                                             s.at, s.radius / self.ic.pixscale)
                 self.sc.spectrum.set_colors()
         if event == 'segment modified':
@@ -337,9 +338,13 @@ class GUI (QMainWindow):
                 self.SI.delta  = self.SI.fwhm * rnew
                 self.onModifiedAperture('segment_modified')
                 
+                
+    def newContSubtracted(self, event):
+        """Compute and save cube continuum subtracted for each flight"""
+        from astropy.io import fits
+        from fifipy.cubik.data import computeNoise
+        from dask import delayed, compute        
 
-    def newUncertainty(self, event):
-        """ Compute and save new uncertainty for the WXY file. """
         aperture = self.CI.circle
         s = self.specCube
         sc = self.specCloud
@@ -357,18 +362,60 @@ class GUI (QMainWindow):
         areafactor = (s.pixscale/radius)**2/np.pi
         
         # Copy WXY file
-        import os
-        from sys import platform
         infile = os.path.join(self.pathFile, self.WXYfile)
-        outfile = os.path.join(self.pathFile, 'WXY_cubik.fits')
-        outname = os.path.join(self.pathFile, 'cubik.fits')
-        if platform in ['linux', 'darwin']:
+        outfile = os.path.join(self.pathFile, 'WXY_cs_cubik.fits')
+        if sys.platform in ['linux', 'darwin']:
             os.popen('cp -f '+infile+' '+outfile)
         else:
             os.popen('copy '+infile+' '+outfile)
         
+        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, sc.flight, self.SI.delta, x0, 
+                                        y0, radius, (idx[i],idy[i]), contSub=True) 
+                  for i in range(len(idx))]
+        print('Starting the computation of uncertainty for ',len(idx),' points')
+        ifluxnoise = compute(* pixels, scheduler='processes')
+
+        print('Storing data')        
+        for i, j, fluxnoise  in zip(idx, idy, ifluxnoise):
+            newflux[:,j,i], uncertainty[:,j,i] = fluxnoise
+
+        # Update new WXY file with flux and uncertainty
+        with fits.open(outfile, mode='update') as hdl:
+            hdl['FLUX'].data = newflux
+            hdl['ERROR'].data = uncertainty
+        
+
+    def newUncertainty(self, event):
+        """ Compute and save new uncertainty for the WXY file. """
+        from astropy.io import fits
         from fifipy.cubik.data import computeNoise
         from dask import delayed, compute        
+
+        aperture = self.CI.circle
+        s = self.specCube
+        sc = self.specCloud
+        radius = aperture.radius
+        nz, ny, nx = np.shape(s.eflux)
+        uncertainty = np.empty((nz, ny, nx))
+        newflux = np.empty((nz, ny, nx))
+        idx = np.isnan(s.eflux)
+        uncertainty[idx] = np.nan
+        newflux[idx] = np.nan
+        xyerror = np.nanmedian(s.eflux, axis=0)
+        idy, idx = np.where(np.isfinite(xyerror))
+        # Compute the uncertainty for all the spatial pixels in the list
+        x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)  
+        areafactor = (s.pixscale/radius)**2/np.pi
+        
+        # Copy WXY file
+        infile = os.path.join(self.pathFile, self.WXYfile)
+        outfile = os.path.join(self.pathFile, 'WXY_cubik.fits')
+        outname = os.path.join(self.pathFile, 'cubik.fits')
+        if sys.platform in ['linux', 'darwin']:
+            os.popen('cp -f '+infile+' '+outfile)
+        else:
+            os.popen('copy '+infile+' '+outfile)
+        
         pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, self.SI.delta, x0, 
                                         y0, radius, areafactor, (idx[i],idy[i])) 
                   for i in range(len(idx))]
@@ -383,10 +430,6 @@ class GUI (QMainWindow):
         print('Storing data')        
         for i, j, fluxnoise  in zip(idx, idy, ifluxnoise):
             newflux[:,j,i], uncertainty[:,j,i] = fluxnoise
-
-
-
-
         
         # Save the computed noise
         from astropy.io import fits
