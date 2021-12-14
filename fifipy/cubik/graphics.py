@@ -581,7 +581,7 @@ class SpectrumCanvas(MplCanvas):
         self.ax1.axhline(s.baseline, color='lime')
         try:
             self.ax1.axhline(s.baseline - 4 * s.m1, color='lime')
-            self.ax1.axhline(s.baseline + 4 * s.m1, color='lime')
+            self.ax1.axhline(s.baseline + 5 * s.m1, color='lime')
             self.ax1.set_ylim(s.baseline - 15 * s.m1, s.baseline + 15 * s.m1)
         except:
             print('dispersion is NaN')

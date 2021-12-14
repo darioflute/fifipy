@@ -234,6 +234,7 @@ class spectralCloud(object):
         f = np.concatenate(f)
         flight = np.concatenate(flight)
         print('shape of f ',np.shape(f))
+        print('type of flight', type(flight))
         #print('stack of ', nstack,' frames')
         idx = np.isfinite(f)
         print('n finite ',np.sum(idx))
@@ -588,7 +589,7 @@ def filterSpectrumOld(wave, w, f, d, delta, radius, areafactor):
                     m1 = np.nanmedian(np.abs(residual - m0))
                     if m1 > base1:
                         m1 = base1
-                    idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & ((fi - base0) > - 3.5 * base1)
+                    idx = (residual < 5 * m1) & (residual > - 3.5 * m1) & ((fi - base0) > - 3.5 * base1)
                     fi = fi[idx]
                     wi = wi[idx]
                     di = di[idx]

@@ -416,8 +416,8 @@ class GUI (QMainWindow):
         else:
             os.popen('copy '+infile+' '+outfile)
         
-        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, self.SI.delta, x0, 
-                                        y0, radius, areafactor, (idx[i],idy[i])) 
+        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, sc.flight, self.SI.delta, x0, 
+                                        y0, radius, (idx[i],idy[i])) 
                   for i in range(len(idx))]
         print('Starting the computation of uncertainty for ',len(idx),' points')
         ifluxnoise = compute(* pixels, scheduler='processes')
