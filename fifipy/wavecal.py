@@ -263,7 +263,12 @@ def fitLines(wlines, fwhms, g, w, specs, i, j):
     xx = x[mask]
     yy = y[mask]
     intercept = np.nanmedian(yy)
-    slope = np.nanmedian((yy[1:]-yy[:-1])/(xx[1:]-xx[:-1]))
+    dx = xx[1:]-xx[:-1]
+    dy = yy[1:]-yy[:-1]
+    # Exclude repetitions in the data
+    idx = dx != 0
+    slope = np.nanmedian(dy[idx]/dx[idx])
+    #slope = np.nanmedian((yy[1:]-yy[:-1])/(xx[1:]-xx[:-1]))
     # Continuum
     model = QuadraticModel(prefix='q_')
     params = model.make_params()
