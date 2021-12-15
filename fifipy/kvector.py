@@ -787,7 +787,8 @@ def computeDeltaVector(infile, comparison = None):
     ax1.grid()
     ax1.set_title(channel + ' ' + dichroic)
     if channel == 'R':
-        ax1.set_ylim(-1.5,-0.5)
+        pass
+        #ax1.set_ylim(-1.5,-0.5)
     else:
         ax1.set_ylim(-0.4,2.5)
     ax1.set_ylabel('$\Delta$x [mm]')
