@@ -87,13 +87,18 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
                    obsdate='2015-03-12T04:41:33')
     '''
 
+    # Case of array/dichroic/order
     if array == 'RED':
-        channel = 'R'
+        if dichroic == '105':
+            channel = 'R105'
+        else:
+            channel = 'R130'
     else:
         if order == '1':
             channel = 'B1'
         else:
             channel = 'B2'
+            
 
     # Extract month and year from date
     obsdate = obsdate.replace('T', '-')
