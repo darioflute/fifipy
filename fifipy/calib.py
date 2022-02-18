@@ -1,4 +1,4 @@
-def waveCal(gratpos, dichroic, obsdate, array, order):
+def waveCalOld(gratpos, dichroic, obsdate, array, order):
     import numpy as np
     import pandas as pd
     import os
@@ -57,6 +57,97 @@ def waveCal(gratpos, dichroic, obsdate, array, order):
     QOFF = w1.iloc[6][co]
     QS = w1.iloc[7][co]
     ISOFF = w1.iloc[8:][co].values
+
+    pix = np.arange(16) + 1.
+    result = np.zeros((25, 16))
+    result_dwdp = np.zeros((25, 16))
+    for module in range(25):
+        phi = 2. * np.pi * ISF * (gratpos + ISOFF[module]) / 2.0 ** 24
+        sign = np.sign(pix - QOFF)
+        delta = (pix - 8.5) * PS + sign * (pix - QOFF) ** 2 * QS
+        slitPos = 25 - 6 * (module // 5) + module % 5
+        g = g0 * np.cos(np.arctan2(slitPos - NP, a))  # Careful with arctan
+        lambd = 1000. * (g / order) * (np.sin(phi + gamma + delta) +
+                                       np.sin(phi - gamma))
+        dwdp = 1000. * (g / order) * (PS + 2. * sign * QS *
+                                      (pix - QOFF)) * np.cos(phi + gamma + delta)
+        result[module, :] = lambd
+        result_dwdp[module, :] = dwdp
+
+    return result, result_dwdp
+
+def waveCal(gratpos, dichroic, obsdate, array, order):
+    import numpy as np
+    import pandas as pd
+    import os
+
+    '''
+    Usage:
+    l,lw = waveCal( gratpos=1496600, order=1, array='RED',dichroic=105,
+                   obsdate='2015-03-12T04:41:33')
+    '''
+
+    # Case of array/dichroic/order
+    if array == 'RED':
+        if dichroic == '105':
+            channel = 'R105'
+        else:
+            channel = 'R130'
+    else:
+        if order == '1':
+            channel = 'B1'
+        else:
+            channel = 'B2'
+            
+
+    # Extract month and year from date
+    obsdate = obsdate.replace('T', '-')
+    year = obsdate.split('-')[0]
+    month = obsdate.split('-')[1]
+    day = obsdate.split('-')[2]
+    odate = year+month+day
+
+    path0, file0 = os.path.split(__file__)
+    header_list = ["Date", "ch", "g0","NP","a","PS","QOFF","QS",
+               "I1","I2","I3","I4","I5","I6","I7","I8","I9","I10",
+               "I11","I12","I13","I14","I15","I16","I17","I18","I19","I20",
+               "I21","I22","I23","I24","I25"]
+
+    wvdf = pd.read_csv(os.path.join(path0, 'data' ,'FIFI_LS_WaveCal_Coeffs.txt'), 
+                   comment='#', delimiter='\s+', names=header_list)
+    # Fixed variables
+    ISF = 1
+    if array == 'RED':
+        gamma = 0.0167200
+    else:
+        gamma = 0.0089008
+
+
+    # Select calibration date
+    dates = np.unique(wvdf['Date'])
+    #print('dates ', dates)
+    for i, date in enumerate(dates):
+        if date < int(odate):
+            pass
+        else:
+            break
+        
+    idx = dates < int(odate)
+    #print('idx ', idx)
+    caldate = np.max(dates[idx])   
+
+
+    # Select line in calibration file with caldate and channel
+    idx = (wvdf["Date"] == caldate) & (wvdf["ch"] == channel)
+    wcal = wvdf.loc[idx]
+
+    g0 = wcal['g0'].values[0]
+    NP = wcal['NP'].values[0]
+    a = wcal['a'].values[0]
+    PS = wcal['PS'].values[0]
+    QOFF = wcal['QOFF'].values[0]
+    QS = wcal['QS'].values[0]
+    ISOFF = wcal.iloc[0][8:].values
 
     pix = np.arange(16) + 1.
     result = np.zeros((25, 16))

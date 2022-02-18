@@ -15,7 +15,7 @@ def plotResponse(channel,dichroic,order,w,medspec,alpha,caldir,period):
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy import units as u
-    from astropy.modeling.blackbody import blackbody_nu
+    from astropy.modeling.models import BlackBody
     from astropy.io import fits
     import os
 
@@ -80,7 +80,8 @@ def plotResponse(channel,dichroic,order,w,medspec,alpha,caldir,period):
     
     wavelengths = w *1.e4 * u.AA
     temperature = 150 * u.K
-    flux_nu = blackbody_nu(wavelengths, temperature)
+    blackbody_nu = BlackBody(temperature)
+    flux_nu = blackbody_nu(wavelengths)
     fnu = medspec/flux_nu
     fig,ax = plt.subplots(figsize=(16,8))
     ax.plot(wt,tt,label=label1,color='blue',alpha=0.75)
