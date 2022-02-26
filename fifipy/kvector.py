@@ -825,7 +825,7 @@ def computeDeltaVector(infile, comparison = None):
         gp = 822000
     else:
         gp = 1195000
-    Rx = (ax * gp + bx)*0.842
+    Rx = (ax * gp + bx) * 0.842
     Ry = - (ay * gp + by) * 0.842
     print(u'ax {0:.4e} \u00b1 {1:.4e}  bx {2:.4e} \u00b1 {3:.4e}'.format(ax,sax,bx,sbx))
     print(u'ay {0:.4e} \u00b1 {1:.4e}  by {2:.4e} \u00b1 {3:.4e}'.format(ay,say,by,sby))

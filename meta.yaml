@@ -26,6 +26,8 @@ requirements:
 test:
   imports:
     - fifipy
+  commands:
+    - cubik
 
 about:
   home: https://github.com/darioflute/fifipy
