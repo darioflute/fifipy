@@ -13,7 +13,7 @@ config = {
     'url': 'https://github.com/darioflute/fifipy.git',
     'download_url': 'https://github.com/darioflute/fifipy',
     'license': 'GPLv3+',
-    'packages': ['fifipy'],
+    'packages': ['fifipy','fifipy.cubik'],
     'scripts': ['bin/cubik'],
     'include_package_data': True,
     'package_data': {'fifipy': ['icons/*.png', 'icons/*.gif', 'stylesheet.css',
