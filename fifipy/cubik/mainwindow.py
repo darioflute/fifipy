@@ -415,17 +415,19 @@ class GUI (QMainWindow):
             os.popen('cp -f '+infile+' '+outfile)
         else:
             os.popen('copy '+infile+' '+outfile)
-        
+
+        # Parallel
         pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, sc.flight, self.SI.delta, x0, 
                                         y0, radius, (idx[i],idy[i])) 
                   for i in range(len(idx))]
         print('Starting the computation of uncertainty for ',len(idx),' points')
         ifluxnoise = compute(* pixels, scheduler='processes')
 
+        # Sequential
         #ifluxnoise = []
         #for i in range(len(idx)):
-        #    ifluxnoise.append(computeNoise(s.wave, sc.w, sc.f, self.SI.delta, x0, 
-        #                                y0, radius, areafactor, (idx[i],idy[i])))
+        #    ifluxnoise.append(computeNoise(s.wave, sc.w, sc.f, sc.flight, self.SI.delta, x0, 
+        #                                   y0, radius, (idx[i],idy[i])))
 
         print('Storing data')        
         for i, j, fluxnoise  in zip(idx, idy, ifluxnoise):

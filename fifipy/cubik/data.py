@@ -435,6 +435,9 @@ def filterSpectrum(wave, w, f, flight, d, delta, radius, contSub=False):
         # Weight the delta as a function of the median
         n = np.array(n)
         nmin = np.median(n) * 0.5
+        if nmin <= 0:
+            return n, n           
+
         wmin = np.nanmin(wave[n > nmin])
         wmax = np.nanmax(wave[n > nmin])
         wmid = (wmin + wmax) / 2
