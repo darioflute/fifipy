@@ -580,8 +580,10 @@ class SpectrumCanvas(MplCanvas):
         self.ax1.plot(s.wrejected, s.frejected, 'o', color='black', ms=6, ls='None', mfc='None')
         self.ax1.axhline(s.baseline, color='lime')
         try:
-            self.ax1.axhline(s.baseline - 4 * s.m1, color='lime')
-            self.ax1.axhline(s.baseline + 5 * s.m1, color='lime')
+            #self.ax1.axhline(s.baseline - 5 * s.m1, color='lime')
+            #self.ax1.axhline(s.baseline + 5 * s.m1, color='lime')
+            self.ax1.plot(s.wave, s.baseline + 3 * s.m1 / s.trans, color='lime')
+            self.ax1.plot(s.wave, s.baseline - 3 * s.m1 / s.trans, color='lime')
             self.ax1.set_ylim(s.baseline - 15 * s.m1, s.baseline + 15 * s.m1)
         except:
             print('dispersion is NaN')
@@ -608,6 +610,7 @@ class SpectrumCanvas(MplCanvas):
         self.ax3.plot(s.wave, s.nflux, color='tab:red')
         self.ax3.plot(s.wave, s.nn, color='tab:pink')
         self.ax4.plot(s.wt, s.at, color='tab:blue')
+        self.ax4.plot(s.wave, s.trans, color='tab:blue',alpha=0.5)
         self.ax5.plot(s.wave, s.deltas, color='tab:orange')
         self.ax3.set_xlabel('Wavelength [$\\mu$m]')
         self.ax1.set_ylabel('Cloud')

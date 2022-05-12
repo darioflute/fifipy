@@ -47,6 +47,7 @@ class spectralCube(object):
         utrans = hdl['UNSMOOTHED_TRANSMISSION'].data
         self.wt = utrans[0,:]
         self.at = utrans[1,:]
+        self.trans = hdl['TRANSMISSION'].data
         D = 2.5 #m
         lam = np.nanmean(self.wave)*1.e-6
         fwhm = 1.01 * lam / D * 180 / np.pi * 3600 #mirror with obstruction  
@@ -141,7 +142,7 @@ class spectralCloud(object):
     
     def __init__(self, path, pixscale, extension='WSH'):
         calfiles = fnmatch.filter(os.listdir(path),"*"+extension+"*.fits")
-        nstack = 0
+        #nstack = 0
         self.pixscale = pixscale
         x = []
         y = []
@@ -248,7 +249,7 @@ class spectralCloud(object):
     
 class Spectrum(object):
     """Spectrum at coordinate."""
-    def __init__(self, wave, flux, eflux, w, f, fl, distance, wt, at, hwhm):
+    def __init__(self, wave, flux, eflux, w, f, fl, distance, wt, at, trans, hwhm):
         self.wave = wave
         self.flux = flux
         self.eflux = eflux
@@ -258,6 +259,7 @@ class Spectrum(object):
         self.d = distance
         self.wt = wt
         self.at = at
+        self.trans = trans
         self.hwhm = hwhm
 
     def set_colors(self):
@@ -283,8 +285,8 @@ class Spectrum(object):
         
     def set_filter(self, delta, radius, pixscale):
         #from fifipy.stats import biweight
-        import statsmodels.api as sm
-        lowess = sm.nonparametric.lowess
+        #import statsmodels.api as sm
+        #lowess = sm.nonparametric.lowess
 
         
         self.delta = delta * 0.5  # Half of the FWHM 
@@ -295,7 +297,7 @@ class Spectrum(object):
         for wm in self.w:
             idx = np.abs(self.w - wm) <= self.delta
             wdensity.append(np.sum(idx))
-        medwdensity = np.nanmedian(wdensity)
+        #medwdensity = np.nanmedian(wdensity)
         wdensity = np.array(wdensity)
         print('wdensity ', np.shape(wdensity))
 
@@ -317,7 +319,7 @@ class Spectrum(object):
         print('computed baseline')
         self.m1 = m1
         
-        #trans = np.interp(self.w, self.wt, self.at)
+        trans = np.interp(self.w, self.wave, self.trans)
         
         flux = []
         n = []
@@ -335,7 +337,7 @@ class Spectrum(object):
         for wm, nm in zip(self.wave, n):
             delta = self.delta * np.sqrt(n90 / nm) # Adjust interval
             deltas.append(delta)
-            idx = (np.abs(self.w - wm) <= delta) & (np.abs(self.f - self.baseline) < 8 * self.m1)
+            idx = (np.abs(self.w - wm) <= delta) & (np.abs(self.f - self.baseline) < 10 * self.m1)
             # Compute the biweight mean
             #biw, sbiw = biweight(self.f[idx])
             flux.append(np.nanmedian(self.f[idx]))
@@ -360,7 +362,7 @@ class Spectrum(object):
                 fi = self.f[idx]
                 wi = self.w[idx]
                 #bi = self.baseline[idx]
-                #ti = trans[idx]
+                ti = trans[idx]
                 di = self.d[idx] / radius
                 dw = (wi - wm) / delta
                 idf = np.isfinite(flux1)
@@ -371,7 +373,7 @@ class Spectrum(object):
                     if m1 > self.m1:
                         m1 = self.m1
                     # idx = np.abs(residual) < 4 * m1
-                    idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & ((fi - self.baseline) > - 3.5 * self.m1)
+                    idx = (residual < 4 * m1/ti) & (residual > - 4 * m1/ti) & ((fi - self.baseline) > - 4 * self.m1/ti)
                     wr.extend(wi[~idx])
                     fr.extend(fi[~idx])
                     fi = fi[idx]
@@ -422,7 +424,7 @@ class Spectrum(object):
         self.wrejected = np.array(wr)
         self.frejected = np.array(fr)
         
-def filterSpectrum(wave, w, f, flight, d, delta, radius, contSub=False):
+def filterSpectrum(wave, trans, w, f, flight, d, delta, radius, contSub=False):
         # Continuum subtraction for each individual flight
         # excluding the middle third which probably has the source
         
@@ -473,7 +475,7 @@ def filterSpectrum(wave, w, f, flight, d, delta, radius, contSub=False):
         # Blank very negative values
         m0 = np.nanmedian(np.ravel(f))
         m1 = np.nanmedian(np.abs(np.ravel(f) - m0))
-        idx = (f - m0) < - 4 * m1
+        idx = (f - m0) < - 10 * m1
         f[idx] = np.nan
         
         n90 = np.percentile(n, 90, interpolation = 'midpoint') 
@@ -486,6 +488,8 @@ def filterSpectrum(wave, w, f, flight, d, delta, radius, contSub=False):
             deltas.append(de) # Adjust interval
             idx = (np.abs(w - wm) <= de) & (np.abs(f - base0) < 8 * base1)
             flux.append(np.nanmedian(f[idx]))
+
+        itrans = np.interp(w, wave, trans)
             
         # Rejection of outliers
         for kiter in range(6):       
@@ -496,6 +500,7 @@ def filterSpectrum(wave, w, f, flight, d, delta, radius, contSub=False):
                 idx = np.abs(w - wm) <= de
                 fi = f[idx]
                 wi = w[idx]
+                ti = itrans[idx]
                 di = d[idx] / radius
                 dw = (wi - wm) / de
                 idf = np.isfinite(flux1)
@@ -505,7 +510,8 @@ def filterSpectrum(wave, w, f, flight, d, delta, radius, contSub=False):
                     m1 = np.nanmedian(np.abs(residual - m0))
                     if m1 > base1:
                         m1 = base1
-                    idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & ((fi - base0) > - 3.5 * base1)
+                    #idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & ((fi - base0) > - 3.5 * base1)
+                    idx = (residual < 4 * m1/ti) & (residual > - 4 * m1/ti) & ((fi - base0) > - 4 * base1/ti)
                     fi = fi[idx]
                     wi = wi[idx]
                     dw = dw[idx]
@@ -625,7 +631,7 @@ def filterSpectrumOld(wave, w, f, d, delta, radius, areafactor):
                 noise.append(e0)
         return np.array(flux), np.array(noise)
         
-def computeNoise(wave, scw, scf, scflight, delta, x0, y0, radius, center, contSub=False):
+def computeNoise(wave, trans, scw, scf, scflight, delta, x0, y0, radius, center, contSub=False):
         xc, yc = center
         distance = np.hypot(x0 - xc, y0 - yc)   # distance in pixels
         idx = distance <= radius
@@ -633,5 +639,5 @@ def computeNoise(wave, scw, scf, scflight, delta, x0, y0, radius, center, contSu
         w = scw[idx]
         f = scf[idx]  
         flight = scflight[idx]
-        nflux, noise = filterSpectrum(wave, w, f, flight, dists, delta, radius, contSub=contSub)
+        nflux, noise = filterSpectrum(wave, trans, w, f, flight, dists, delta, radius, contSub=contSub)
         return nflux, noise       

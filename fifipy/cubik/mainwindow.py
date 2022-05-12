@@ -153,10 +153,10 @@ class GUI (QMainWindow):
         self.press = None
         self.ptime = None
         self.dv = 0
-        cid1 = self.ic.mpl_connect('scroll_event', self.onWheel)
-        cid2 = self.ic.mpl_connect('motion_notify_event', self.onMotion)
-        cid3 = self.ic.mpl_connect('button_press_event', self.onPress)
-        cid4 = self.ic.mpl_connect('button_release_event', self.onRelease)
+        #cid1 = self.ic.mpl_connect('scroll_event', self.onWheel)
+        #cid2 = self.ic.mpl_connect('motion_notify_event', self.onMotion)
+        #cid3 = self.ic.mpl_connect('button_press_event', self.onPress)
+        #cid4 = self.ic.mpl_connect('button_release_event', self.onRelease)
         
     def onpick(self, event):
         """React to onpick events."""
@@ -287,7 +287,8 @@ class GUI (QMainWindow):
                 flux = s.flux[:, s.points[imin,1], s.points[imin,0]]
                 eflux = s.eflux[:, s.points[imin,1], s.points[imin,0]]
                 self.sc.spectrum = Spectrum(s.wave, flux, eflux, w, f, fl, dists, s.wt, 
-                                            s.at, s.radius / self.ic.pixscale)
+                                            s.at, s.trans, s.radius / self.ic.pixscale)
+                print('Spectrum defined')
                 self.sc.spectrum.set_colors()
         if event == 'segment modified':
             # check if the segment has shifted
@@ -359,7 +360,7 @@ class GUI (QMainWindow):
         idy, idx = np.where(np.isfinite(xyerror))
         # Compute the uncertainty for all the spatial pixels in the list
         x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)  
-        areafactor = (s.pixscale/radius)**2/np.pi
+        #areafactor = (s.pixscale/radius)**2/np.pi
         
         # Copy WXY file
         infile = os.path.join(self.pathFile, self.WXYfile)
@@ -369,8 +370,9 @@ class GUI (QMainWindow):
         else:
             os.popen('copy '+infile+' '+outfile)
         
-        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, sc.flight, self.SI.delta, x0, 
-                                        y0, radius, (idx[i],idy[i]), contSub=True) 
+        pixels = [delayed(computeNoise)(s.wave, s.trans, sc.w, sc.f, sc.flight, 
+                                        self.SI.delta, x0, y0, radius, 
+                                        (idx[i],idy[i]), contSub=True) 
                   for i in range(len(idx))]
         print('Starting the computation of uncertainty for ',len(idx),' points')
         ifluxnoise = compute(* pixels, scheduler='processes')
@@ -405,7 +407,7 @@ class GUI (QMainWindow):
         idy, idx = np.where(np.isfinite(xyerror))
         # Compute the uncertainty for all the spatial pixels in the list
         x0, y0 = self.ic.wcs.wcs_world2pix(sc.x, sc.y, 0)  
-        areafactor = (s.pixscale/radius)**2/np.pi
+        #areafactor = (s.pixscale/radius)**2/np.pi
         
         # Copy WXY file
         infile = os.path.join(self.pathFile, self.WXYfile)
@@ -417,8 +419,8 @@ class GUI (QMainWindow):
             os.popen('copy '+infile+' '+outfile)
 
         # Parallel
-        pixels = [delayed(computeNoise)(s.wave, sc.w, sc.f, sc.flight, self.SI.delta, x0, 
-                                        y0, radius, (idx[i],idy[i])) 
+        pixels = [delayed(computeNoise)(s.wave, s.trans, sc.w, sc.f, sc.flight, 
+                                        self.SI.delta, x0, y0, radius, (idx[i],idy[i])) 
                   for i in range(len(idx))]
         print('Starting the computation of uncertainty for ',len(idx),' points')
         ifluxnoise = compute(* pixels, scheduler='processes')
@@ -426,7 +428,7 @@ class GUI (QMainWindow):
         # Sequential
         #ifluxnoise = []
         #for i in range(len(idx)):
-        #    ifluxnoise.append(computeNoise(s.wave, sc.w, sc.f, sc.flight, self.SI.delta, x0, 
+        #    ifluxnoise.append(computeNoise(s.wave, s.trans, sc.w, sc.f, sc.flight, self.SI.delta, x0, 
         #                                   y0, radius, (idx[i],idy[i])))
 
         print('Storing data')        
@@ -434,7 +436,7 @@ class GUI (QMainWindow):
             newflux[:,j,i], uncertainty[:,j,i] = fluxnoise
         
         # Save the computed noise
-        from astropy.io import fits
+        #from astropy.io import fits
         hdu = fits.PrimaryHDU()
         hdu1 = fits.ImageHDU()
         hdu1.data = newflux
