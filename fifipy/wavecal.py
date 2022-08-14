@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 
-def reduceData(rootdir, names=None, channels=['sw','lw']):
+import warnings
+warnings.filterwarnings(action='ignore', message='Mean of empty slice')
+warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
+
+def reduceData(rootdir, names=None, channels=['sw','lw'],telSim=True):
     """
     Reduction of wavelength calibration data taken in the lab
 
@@ -53,7 +57,7 @@ def reduceData(rootdir, names=None, channels=['sw','lw']):
                     ifiles = files[id0:idi]
                     id0 = idi
                     print('\nIn GC', name, kf, ' there are ', len(ifiles), channel+' files')
-                    gpos, specs = computeSpectra(ifiles, telSim=True)
+                    gpos, specs = computeSpectra(ifiles, telSim=telSim)
                     aor, hk, gratpos, flux = readData(ifiles[0])
                     obsdate,telpos,pos,xy,an,za,alti,wv = hk
                     detchan, order, dichroic, ncycles, nodbeam, filegpid, filenum = aor
@@ -190,13 +194,27 @@ def lineclean(x, y):
     #    y3 = np.abs(dy) > 5*mad
     #    ysmooth[y3] = np.nan 
     # Eliminate values under the median of the lowest 50% 
+    
+    # Case of negative fluxes 
+    #ymax = np.nanmax(y)
+    #if ymax < 0:
+    #    y = -y
+    
     med = np.nanmedian(y)
+    if med < 0:
+        y -= med
+        med = 0
     med50 = np.nanmedian(y[y < med])
     y3 = (y < (med50 * 0.5)) | (y < 0)
     y[y3] = np.nan 
     #ysmooth[y3] = np.nan
     # Interpolate spectrum
     idnan = np.isfinite(y)
+    #if ymax < 0:
+    #    y[~idnan] = med
+    #else:
+    if np.sum(idnan) == 0:
+        return
     if np.sum(~idnan) > 0:
         ispec = np.interp(x[~idnan], x[idnan],y[idnan])
         y[~idnan] = ispec
@@ -258,90 +276,109 @@ def fitLines(wlines, fwhms, g, w, specs, i, j):
     lineclean(x, y)
     # Estimate of intercept and slope
     mask = np.isfinite(y)
+    #print('finite ',np.sum(mask))
     for c,d in zip(cen,wid):
         mask &= np.abs(x-c) > 3*d
-    xx = x[mask]
-    yy = y[mask]
-    intercept = np.nanmedian(yy)
-    dx = xx[1:]-xx[:-1]
-    dy = yy[1:]-yy[:-1]
-    # Exclude repetitions in the data
-    idx = dx != 0
-    slope = np.nanmedian(dy[idx]/dx[idx])
-    #slope = np.nanmedian((yy[1:]-yy[:-1])/(xx[1:]-xx[:-1]))
-    # Continuum
-    model = QuadraticModel(prefix='q_')
-    params = model.make_params()
-    params['q_a'].set(0, vary=True)
-    params['q_b'].set(slope, vary=True)
-    params['q_c'].set(intercept, vary=True)
-    result = model.fit(yy, params, x=xx, method='leastsq')
-    a = result.params['q_a'].value
-    b = result.params['q_b'].value
-    c = result.params['q_c'].value
-    continuum = a * x**2 + b * x + c  
-    
-    # Define the model
-    y -= continuum
-    model = PseudoVoigtModel(prefix='l0_')
-    if len(cen) > 1:
-        for k in range(1, len(cen)):
-            model += PseudoVoigtModel(prefix='l' + str(k) + '_')
-
-    params = model.make_params()
-    ncen = len(cen)
-    for k, (c,d) in enumerate(zip(cen,wid)):
-        li = 'l' + str(k) + '_'
-        if (c > np.min(x)+3*d) & (c < np.max(x)-3*d):
-            imax = searchtop(x, y, c)
-            if np.abs(c - x[imax]) < d:
-                #print('in ', c, x[imax])
-                c = x[imax]
-            #else:
-                #print('out ', c)
-            if ncen > 1:
-                if k > 0:
-                    distance = cen[k]-cen[k-1]
-                    if distance < d*2:
-                        d = distance/3
-                if k < ncen-1:
-                    distance = cen[k+1]-cen[k]
-                    if distance < d*2:
-                        d = distance/3
-            a = y[imax] # - (intercept + slope * c)
-            a *= np.sqrt(2*np.pi) * d/2.355
-            clow = c - d/2
-            chigh = c + d/2
-            params[li + 'center'].set(c, min=clow, max=chigh)
-            params[li + 'sigma'].set(d, min=d*0.5)
-            params[li + 'fraction'].set(0.0, vary=True)
-            params[li + 'amplitude'].set(a, min=a*0.5, max=a*3)
-        else:
-            a = 1
-            params[li + 'center'].set(c, vary=False)
-            params[li + 'sigma'].set(d, vary=False)
-            params[li + 'fraction'].set(0.0, vary=False)
-            params[li + 'amplitude'].set(a)
         
-
-    result = model.fit(y, params, x=x, method='leastsq')
-
+        
     centers = []
     fwhms = []
     amplitudes = []
     cerrors = []
     fractions = []
-    for k in range(len(cen)):
-        li = 'l' + str(k) + '_'
-        centers.append(result.params[li+'center'].value + gmedian)
-        cerrors.append(result.params[li+'center'].stderr)
-        fwhms.append(result.params[li+'fwhm'].value)
-        amplitudes.append(result.params[li+'amplitude'].value)
-        fractions.append(result.params[li+'fraction'].value)
+
+    if np.sum(mask) < 5:
+        intercept = np.nan
+        slope = np.nan        
+        for k in range(len(cen)):
+            li = 'l' + str(k) + '_'
+            centers.append(np.nan)
+            cerrors.append(0)
+            fwhms.append(np.nan)
+            amplitudes.append(0)
+            fractions.append(0)
+        model = np.ones(len(g)) * np.nan
+    else:
+        xx = x[mask]
+        yy = y[mask]
+        intercept = np.nanmedian(yy)
+        dx = xx[1:]-xx[:-1]
+        dy = yy[1:]-yy[:-1]
+        # Exclude repetitions in the data
+        idx = dx != 0
+        slope = np.nanmedian(dy[idx]/dx[idx])
+        #slope = np.nanmedian((yy[1:]-yy[:-1])/(xx[1:]-xx[:-1]))
+        # Continuum
+        model = QuadraticModel(prefix='q_')
+        params = model.make_params()
+        params['q_a'].set(0, vary=True)
+        params['q_b'].set(slope, vary=True)
+        params['q_c'].set(intercept, vary=True)
+        result = model.fit(yy, params, x=xx, method='leastsq')
+        a = result.params['q_a'].value
+        b = result.params['q_b'].value
+        c = result.params['q_c'].value
+        continuum = a * x**2 + b * x + c  
+        
+        # Define the model
+        y -= continuum
+        model = PseudoVoigtModel(prefix='l0_')
+        if len(cen) > 1:
+            for k in range(1, len(cen)):
+                model += PseudoVoigtModel(prefix='l' + str(k) + '_')
+                
+        params = model.make_params()
+        ncen = len(cen)
+        for k, (c,d) in enumerate(zip(cen,wid)):
+            li = 'l' + str(k) + '_'
+            if (c > np.min(x)+3*d) & (c < np.max(x)-3*d):
+                imax = searchtop(x, y, c)
+                if np.abs(c - x[imax]) < d:
+                    #print('in ', c, x[imax])
+                    c = x[imax]
+                #else:
+                    #print('out ', c)
+                if ncen > 1:
+                    if k > 0:
+                        distance = cen[k]-cen[k-1]
+                        if distance < d*2:
+                            d = distance/3
+                    if k < ncen-1:
+                        distance = cen[k+1]-cen[k]
+                        if distance < d*2:
+                            d = distance/3
+                a = y[imax] # - (intercept + slope * c)
+                a *= np.sqrt(2*np.pi) * d/2.355
+                clow = c - d/2
+                chigh = c + d/2
+                params[li + 'center'].set(c, min=clow, max=chigh)
+                params[li + 'sigma'].set(d, min=d*0.5)
+                params[li + 'fraction'].set(0.0, vary=True)
+                if a == 0:
+                    params[li + 'amplitude'].set(a)
+                else:
+                    params[li + 'amplitude'].set(a, min=a*0.5, max=a*3)
+            else:
+                a = 1
+                params[li + 'center'].set(c, vary=False)
+                params[li + 'sigma'].set(d, vary=False)
+                params[li + 'fraction'].set(0.0, vary=False)
+                params[li + 'amplitude'].set(a)
+            
+    
+        result = model.fit(y, params, x=x, method='leastsq')
+    
+        for k in range(len(cen)):
+            li = 'l' + str(k) + '_'
+            centers.append(result.params[li+'center'].value + gmedian)
+            cerrors.append(result.params[li+'center'].stderr)
+            fwhms.append(result.params[li+'fwhm'].value)
+            amplitudes.append(result.params[li+'amplitude'].value)
+            fractions.append(result.params[li+'fraction'].value) 
+        model = result.best_fit + continuum
         
     # Save also fractions and use them as starting point !
-    return j, centers, cerrors, fwhms, amplitudes, fractions, result.best_fit+continuum
-    
+    return j, centers, cerrors, fwhms, amplitudes, fractions, model
 
 def fitData(datafile, plot=True, multi=True):
     """
@@ -448,6 +485,7 @@ def fitData(datafile, plot=True, multi=True):
                     else:
                         linesfit = []
                         for j in range(25):
+                            print(i,j)
                             lfit = fitLines(wpos, fwhm, g, w, specs, i, j)
                             linesfit.append(lfit)          
                     # Unravel and plot/save

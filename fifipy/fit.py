@@ -73,7 +73,7 @@ def fitSlope(data, telSim=False, off=False):
         The off position corresponds to the wheel position when the calibrator is not visible.
     """
 
-    saturationLimit = 2.7
+    saturationLimit = 2.5
     dtime = 1/250.  # Hz
     x = dtime * np.arange(32)
     rshape = np.shape(data)
