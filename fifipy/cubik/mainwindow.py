@@ -138,8 +138,10 @@ class GUI (QMainWindow):
         #radius = 10. / self.ic.pixscale
         radius = self.specCube.radius / self.ic.pixscale
         sc = self.specCloud
-        r0 = np.nanmedian(sc.x)
-        d0 = np.nanmedian(sc.y)
+        #r0 = np.nanmedian(sc.x)
+        #d0 = np.nanmedian(sc.y)
+        r0 = sc.x[0]
+        d0 = sc.y[0]
         x0, y0 = self.ic.wcs.wcs_world2pix(r0, d0, 0)
         #print('center circle is ', x0, y0)
         #self.ic.axes.plot(r0, d0, 'o', color='red',transform=self.ic.axes.get_transform('world'))

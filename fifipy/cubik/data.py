@@ -11,6 +11,10 @@ class spectralCube(object):
     def __init__(self, infile):
         hdl = fits.open(infile, memmap=None, ignore_blank=True)
         self.header = hdl['PRIMARY'].header
+        # array size
+        hflux = hdl['FLUX'].header
+        self.header['NAXIS1'] = hflux['NAXIS1']
+        self.header['NAXIS2'] = hflux['NAXIS2']
         self.wcs = WCS(self.header).celestial
         self.objname = self.header['OBJ_NAME']
         #self.flux = hdl['UNCORRECTED_FlUX'].data
@@ -40,8 +44,25 @@ class spectralCube(object):
         print('ref wav ', self.l0)
         # Found reference pixel
         self.n0 = np.argmin((np.abs(self.wave-self.l0)))
-        self.X = hdl['X'].data
-        self.Y = hdl['Y'].data
+        print('WCS ', self.wcs)
+        try:
+            # Old version of pipeline
+            self.X = hdl['X'].data
+            self.Y = hdl['Y'].data
+        except:
+            # New pipeline version
+            print('Reading Ra and Dec of spaxels')
+            ra = hdl['RA---TAN'].data
+            dec = hdl['DEC--TAN'].data
+            mra = np.nanmedian(ra)
+            mdec= np.nanmedian(dec)
+            if mdec > 0:
+                mdec = np.nanmin(dec)
+            else:
+                mdec = np.nanmax(dec)
+            self.X,y0 = self.wcs.all_world2pix(ra,np.full(len(ra),mdec),0)
+            x0,self.Y = self.wcs.all_world2pix(np.full(len(dec), mra),dec,0)
+            
         self.R = self.header['RESOLUN']  # spectral resolution
         self.pixscale = self.header['PIXSCAL']
         utrans = hdl['UNSMOOTHED_TRANSMISSION'].data
@@ -64,7 +85,7 @@ class spectralCube(object):
         xi,yi = np.meshgrid(xi, yi)
         self.points = np.c_[np.ravel(xi), np.ravel(yi)]
         self.pixscale, ypixscale = proj_plane_pixel_scales(self.wcs) * 3600. # Pixel scale in arcsec
-        print('scale is ', self.pixscale, ' arcsec')
+        print('scale is ', self.pixscale, ' arcsec')            
         
         
 class spectralCloudOld(object):

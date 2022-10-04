@@ -548,6 +548,8 @@ class SpectrumCanvas(MplCanvas):
         s = self.spectrum
         nmedian = np.nanmedian(s.nflux)
         idx = s.nflux > (nmedian * 0.5)
+        if np.sum(idx) <= 0:
+            return
         wmin = np.nanmin(s.wave[idx])
         wmax = np.nanmax(s.wave[idx])
         wrange = (wmax - wmin) / 6.
