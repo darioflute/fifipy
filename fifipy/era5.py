@@ -287,7 +287,8 @@ def addPWV(flight, path='.', altitude=None):
     ntimeok = len(unixtime[idok])
     pwv = np.zeros(ntime)
     g = 9.81 # m/s2
-
+    
+    data = None
     if altitude is None:
         pressure_hPa = 33.863886666667 * pressure_inHg[idok]
     else:
@@ -354,7 +355,7 @@ def addObsWVZ(obsfile, flight, path='.'):
         header = hdl['PRIMARY'].header
         obsdate=header['DATE-OBS']
         if obsdate[0:4] == '1970':
-            print(file ,' has year 1970')
+            print(obsfile ,' has year 1970')
             print('Please repair !')
         else:
             unixt = Time(obsdate).unix
