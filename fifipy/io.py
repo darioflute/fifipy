@@ -87,7 +87,10 @@ def readData(fitsfile, subtractZero=True):
         print ("This program works only with raw FIFI-LS files (Level 1)")
         return
     else:
-        detchan = header['DETCHAN']
+        try:
+            detchan = header['DETCHAN']
+        except:
+            detchan = header['CHANNEL']
         obsdate = header['DATE-OBS']
         telra = header['TELRA']
         teldec = header['TELDEC']
@@ -107,7 +110,10 @@ def readData(fitsfile, subtractZero=True):
             ngrat = header['G_PSUP_B']
             order = header['G_ORD_B']
 
-        filegpid=header['FILEGPID']    
+        try:
+            filegpid=header['FILEGPID']    
+        except:
+            filegpid='NONE'
         nodbeam = header['NODBEAM']
         # Position
         xmap = float(header['DLAM_MAP'])

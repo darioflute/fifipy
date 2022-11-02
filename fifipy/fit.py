@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import stats
 from dask import delayed, compute
-import numba
+#import numba
 
 # @numba.njit(cache=True,nogil=True,parallel=False)
 # def fitSlope(data, telSim=False, off=False):

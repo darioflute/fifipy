@@ -481,7 +481,9 @@ class ImageCanvas(MplCanvas):
         
         for f in flights:
             idf = flight == f
-            self.axes.scatter(xy[idf,0], xy[idf,1], s=5, transform=self.axes.get_transform('fk5'),label=str(int(f)))
+            x_, y_ = self.wcs.all_world2pix(xy[idf,0],xy[idf,1],0)
+            #self.axes.scatter(xy[idf,0], xy[idf,1], s=5, transform=self.axes.get_transform('fk5'),label=str(int(f)))
+            self.axes.scatter(x_,y_, s=5, transform=self.axes.get_transform(self.wcs),label=str(int(f)))
         # Cursor data format
         def format_coord(x,y):
             """ Redefine how to show the coordinates """
@@ -514,7 +516,7 @@ class SpectrumCanvas(MplCanvas):
     def __init__(self, *args, **kwargs):
         MplCanvas.__init__(self, *args, **kwargs)
         self.fig.set_edgecolor('none')
-        gs = gridspec.GridSpec(nrows=3, ncols=1, height_ratios=[2, 2, 1])
+        gs = gridspec.GridSpec(nrows=3, ncols=1, height_ratios=[6, 2, 1])
         self.ax1 = self.fig.add_subplot(gs[0, 0])
         self.ax2 = self.fig.add_subplot(gs[1, 0])
         self.ax3 = self.fig.add_subplot(gs[2, 0])
@@ -584,9 +586,9 @@ class SpectrumCanvas(MplCanvas):
         try:
             #self.ax1.axhline(s.baseline - 5 * s.m1, color='lime')
             #self.ax1.axhline(s.baseline + 5 * s.m1, color='lime')
-            self.ax1.plot(s.wave, s.baseline + 3 * s.m1 / s.trans, color='lime')
-            self.ax1.plot(s.wave, s.baseline - 3 * s.m1 / s.trans, color='lime')
-            self.ax1.set_ylim(s.baseline - 15 * s.m1, s.baseline + 15 * s.m1)
+            self.ax1.plot(s.wave, s.baseline + 5 * s.m1 / s.trans, color='lime')
+            self.ax1.plot(s.wave, s.baseline - 4 * s.m1 / s.trans, color='lime')
+            self.ax1.set_ylim(s.baseline - 8 * s.m1, s.baseline + 12 * s.m1)
         except:
             print('dispersion is NaN')
         for ax in [self.ax1, self.ax2]:
@@ -598,9 +600,9 @@ class SpectrumCanvas(MplCanvas):
             ax.plot(s.wave[~idx], s.fflux[~idx], color='green', alpha=0.3)
         outliers = len(s.frejected)
         mednoise =  np.nanmedian(s.noise[idx])
-        self.ax1.text(0.05, 0.1, '$<\sigma>$: {:6.3f}'.format(mednoise), horizontalalignment='left', 
+        self.ax1.text(0.05, 0.8, '$<\sigma>$: {:6.3f}'.format(mednoise), horizontalalignment='left', 
                       verticalalignment='center', transform=self.ax1.transAxes)
-        self.ax1.text(0.05, 0.2, 'outliers: '+str(outliers), horizontalalignment='left', 
+        self.ax1.text(0.05, 0.9, 'outliers: '+str(outliers), horizontalalignment='left', 
                       verticalalignment='center', transform=self.ax1.transAxes)
         self.ax2.legend()
         ff = np.concatenate((s.flux[idx], s.fflux[idx]))

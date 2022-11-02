@@ -96,14 +96,16 @@ class spectralCloudOld(object):
         nstack = 0
         self.pixscale = pixscale
         for calfile in sorted(calfiles):
-            hlf = fits.open(os.path.join(path, calfile))
-            header = hlf['PRIMARY'].header
-            data = hlf[1].data
-            hlf.close()
+            with fits.open(os.path.join(path, calfile)) as hlf:
+                header = hlf['PRIMARY'].header
+                data = hlf['FLUX'].data
+                xs = hlf['RA'].data* 15
+                ys = hlf['DEC'].data
+                ws = hlf['LAMBDA'].data
             #dx = header['dlam_map']
             #dy = header['dbet_map']
-            obslam = header['OBSLAM']
-            obsbet = header['OBSBET']
+            #obslam = header['OBSLAM']
+            #obsbet = header['OBSBET']
             channel = header['DETCHAN']
             #dx = header['dlam_map']
             #dy = header['dbet_map']
@@ -111,20 +113,20 @@ class spectralCloudOld(object):
             #mid = int(header['MISSN-ID'][-3:])
             #ca = np.cos(detangle * np.pi / 180.)
             #sa = np.sin(detangle * np.pi / 180.)
-            ys = data.YS / 3600.
-            xs = - data.XS / 3600. / np.cos( (ys+obsbet) * np.pi / 180.)
-            skyangle = header['SKY_ANGL']
-            # Rotate coordinates
-            if skyangle != 0:
-                angle = skyangle * np.pi/180.
-                cosa = np.cos(angle)
-                sina = np.sin(angle)
-                x_ = xs.copy()
-                y_ = ys.copy()
-                xs = x_ * cosa + y_ * sina
-                ys = -x_ * sina + y_ * cosa
-            ys += obsbet
-            xs += obslam
+            #ys = data.YS / 3600.
+            #xs = - data.XS / 3600. / np.cos( (ys+obsbet) * np.pi / 180.)
+            #skyangle = header['SKY_ANGL']
+            ## Rotate coordinates
+            #if skyangle != 0:
+            #    angle = skyangle * np.pi/180.
+            #    cosa = np.cos(angle)
+            #    sina = np.sin(angle)
+            #    x_ = xs.copy()
+            #    y_ = ys.copy()
+            #    xs = x_ * cosa + y_ * sina
+            #    ys = -x_ * sina + y_ * cosa
+            #ys += obsbet
+            #xs += obslam
             platscale = header['PLATSCAL']
             if channel == 'RED':
                 #pixfactor = (12.2*12.5)/pixscale**2 # size of pixels from Colditz et al. 2018
@@ -135,8 +137,8 @@ class spectralCloudOld(object):
             #fs = data.UNCORRECTED_DATA / pixfactor   # Normalize for resampling
             #print('Platscale ', platscale)
             #print('Resampling factor: ', self.pixfactor)
-            fs = data.DATA / self.pixfactor   # Normalize for resampling
-            ws = data.LAMBDA
+            fs = data / self.pixfactor   # Normalize for resampling
+            #ws = data.LAMBDA
             ns,nz,ny,nx = np.shape(ws)
             print(ns,nz,ny,nx)
             for i in range(ns):
@@ -180,20 +182,23 @@ class spectralCloud(object):
                 channel = header['DETCHAN']
                 missnid = header['MISSN-ID']
                 flightNumber = int((missnid.split('_F'))[-1])
-                ys = hlf['YS'].data / 3600.
-                xs = -hlf['XS'].data / 3600. / np.cos( (ys+obsbet) * np.pi / 180.)
-                skyangle = header['SKY_ANGL']
-                # Rotate coordinates
-                if skyangle != 0:
-                    angle = skyangle * np.pi/180.
-                    cosa = np.cos(angle)
-                    sina = np.sin(angle)
-                    x_ = xs.copy()
-                    y_ = ys.copy()
-                    xs = x_ * cosa + y_ * sina
-                    ys = -x_ * sina + y_ * cosa
-                ys += obsbet
-                xs += obslam
+                xs = hlf['RA'].data* 15
+                ys = hlf['DEC'].data
+                
+                #ys = hlf['YS'].data / 3600.
+                #xs = -hlf['XS'].data / 3600. / np.cos( (ys+obsbet) * np.pi / 180.)
+                #skyangle = header['SKY_ANGL']
+                ## Rotate coordinates
+                #if skyangle != 0:
+                #    angle = skyangle * np.pi/180.
+                #    cosa = np.cos(angle)
+                #    sina = np.sin(angle)
+                #    x_ = xs.copy()
+                #    y_ = ys.copy()
+                #    xs = x_ * cosa + y_ * sina
+                #    ys = -x_ * sina + y_ * cosa
+                #ys += obsbet
+                #xs += obslam
                 platscale = header['PLATSCAL']
                 print('channel ', channel)
                 if channel == 'RED':
@@ -487,7 +492,7 @@ def filterSpectrum(wave, trans, w, f, flight, d, delta, radius, contSub=False):
         if m0 < 0:
             m0 = 0
         m1 = np.nanmedian(np.abs(np.ravel(f) - m0))
-        idx = np.abs(f - m0) < 4 * m1
+        idx = np.abs(f - m0) < 5 * m1
         m0 = np.nanmedian(np.ravel(f[idx]))
         m1 = np.nanmedian(np.abs(np.ravel(f[idx]) - m0))
         base0 = m0
@@ -532,7 +537,7 @@ def filterSpectrum(wave, trans, w, f, flight, d, delta, radius, contSub=False):
                     if m1 > base1:
                         m1 = base1
                     #idx = (residual < 4 * m1) & (residual > - 3.5 * m1) & ((fi - base0) > - 3.5 * base1)
-                    idx = (residual < 4 * m1/ti) & (residual > - 4 * m1/ti) & ((fi - base0) > - 4 * base1/ti)
+                    idx = (residual < 5 * m1/ti) & (residual > - 3 * m1/ti) & ((fi - base0) > - 4 * base1/ti)
                     fi = fi[idx]
                     wi = wi[idx]
                     dw = dw[idx]
