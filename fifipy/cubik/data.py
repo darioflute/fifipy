@@ -163,7 +163,7 @@ class spectralCloudOld(object):
 class spectralCloud(object):
     """Cloud of points from CAL files."""
     
-    def __init__(self, path, pixscale, extension='WSH'):
+    def __init__(self, path, pixscale, extension='WSH', xy=False):
         calfiles = fnmatch.filter(os.listdir(path),"*"+extension+"*.fits")
         #nstack = 0
         self.pixscale = pixscale
@@ -182,8 +182,12 @@ class spectralCloud(object):
                 channel = header['DETCHAN']
                 missnid = header['MISSN-ID']
                 flightNumber = int((missnid.split('_F'))[-1])
-                xs = hlf['RA'].data* 15
-                ys = hlf['DEC'].data
+                if xy:
+                    xs = hlf['XS'].data
+                    ys = hlf['YS'].data
+                else:
+                    xs = hlf['RA'].data * 15
+                    ys = hlf['DEC'].data
                 
                 #ys = hlf['YS'].data / 3600.
                 #xs = -hlf['XS'].data / 3600. / np.cos( (ys+obsbet) * np.pi / 180.)

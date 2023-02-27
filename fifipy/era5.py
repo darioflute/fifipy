@@ -29,6 +29,37 @@ def retrieveEra5(year,month,day,starthour,endhour,minlon,maxlon,minlat,maxlat,fl
         },
         outfile)
 
+def retrieveEra5O3(year,month,day,starthour,endhour,minlon,maxlon,minlat,maxlat,flight):
+    import cdsapi    
+    outfile = 'F'+str(flight)+'era5O3.nc'
+    time = ['{0:02d}:00'.format(i) for i in range(starthour, endhour+1)]
+    print('time ', time)
+    print(year, month, day)
+    c = cdsapi.Client()
+    c.retrieve(
+        'reanalysis-era5-pressure-levels',
+        {
+            'product_type': 'reanalysis',
+            'format': 'netcdf',
+            'variable': 'ozone mass mixing ratio',
+            'year': '{0:4d}'.format(year),
+            'month': '{0:02d}'.format(month),
+            'day': '{0:02d}'.format(day),
+            'pressure_level': [
+                '1', '2', '3',
+                '5', '7', '10',
+                '20', '30', '50',
+                '70', '100', '125',
+                '150', '175', '200',
+                '225', '250'
+            ],
+            'time': time,
+            'area': [
+                maxlat+1, minlon-1, minlat-1, maxlon+1,
+            ],
+        },
+        outfile)
+
 def pwvFlight(flight, path='.', retrieve=True):
 
     import matplotlib.pyplot as plt

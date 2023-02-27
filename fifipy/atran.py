@@ -84,13 +84,16 @@ def cleanAtran(wave,trans):
     from scipy.interpolate import interp1d
     mask = np.zeros(np.size(wave), dtype=bool)
     regions = [
-                [120.50,120.75],
-                [123.81,124.10],
-                [155.4,155.75],
-                [160.68,160.8],
-                [170.28,170.6],
-                [176.42,176.7],
-                ]   
+        [116.6,117.0],
+        [117.0,117.4],
+        [120.50,120.75],
+        #[123.81,124.10],
+        [136.23,136.35],
+        [155.4,155.75],
+        [160.63,160.9],
+        [170.28,170.6],
+        [176.35,176.9],
+    ]   
     for r in regions:
         try:
             mask[:] = False
@@ -129,33 +132,49 @@ def cleanAtran(wave,trans):
         pass
 
     # Little correction for a line (slide to the left)
-    try:
-        l = [144.3,144.34]
-        mask[:] = 0
-        ml = (wave > l[0]) & (wave < l[1])
-        mask[ml] = True
-        model = interp1d(wave[~mask],trans[~mask],kind='cubic',fill_value='extrapolate')
-        line = trans[ml] - model(wave[ml])
-        trans[ml] -= line
-        r= [144.12,144.5]
-        idx = np.where( (wave > r[0]) & (wave < r[1]))
-        idx = (np.array(idx))[0]
-        nidx = int(np.size(idx)*0.04/(r[1]-r[0]))
-        idxn = idx-nidx
-        trans[idxn] = trans[idx]
-        trans[ml] += line
-    except:
-        pass
+    #try:
+    #    l = [144.3,144.34]
+    #    mask[:] = 0
+    #    ml = (wave > l[0]) & (wave < l[1])
+    #    mask[ml] = True
+    #    model = interp1d(wave[~mask],trans[~mask],kind='cubic',fill_value='extrapolate')
+    #    line = trans[ml] - model(wave[ml])
+    #    trans[ml] -= line
+    #    r= [144.12,144.5]
+    #    idx = np.where( (wave > r[0]) & (wave < r[1]))
+    #    idx = (np.array(idx))[0]
+    #    nidx = int(np.size(idx)*0.04/(r[1]-r[0]))
+    #    idxn = idx-nidx
+    #    trans[idxn] = trans[idx]
+    #    trans[ml] += line
+    #except:
+    #    pass
     
     # Remove absorption by duplication
+    # On the right
     regions = [
-            [188,188.30],
-            ]
+        [142.79,143.045],
+        [150.7,151.04],
+        [188,188.30],
+    ]
     for r in regions:
         try:
             idx = np.where( (wave > r[0]) & (wave < r[1]))
             idx = (np.array(idx))[0]
             idxp = np.arange(-1,-np.size(idx),-1)+idx[0]+np.size(idx)*2+1
+            trans[idxp]=trans[idx[:-1]]
+        except:
+            pass
+    # On the left
+    regions = [
+        [123.46,123.57],
+        [129.349,129.5],
+    ]
+    for r in regions:
+        try:
+            idx = np.where( (wave > r[0]) & (wave < r[1]))
+            idx = (np.array(idx))[0]
+            idxp = np.arange(-1,-np.size(idx),-1)+idx[0]+1
             trans[idxp]=trans[idx[:-1]]
         except:
             pass
@@ -175,18 +194,18 @@ def cleanAtran(wave,trans):
             [[115.32,115.42],
              [115.58,115.8]],
             [[139.29,139.325]],
-            [[142.54,142.87],
-             [142.92,142.96],
-             [143.00,143.085],
-             [143.31,143.42]],
-            [[150.84,151.0],
-             [151.018,151.065]],
+            #[[142.54,142.87],
+            # [142.92,142.96],
+            # [143.00,143.085],
+            # [143.31,143.42]],
+            #[[150.84,151.0],
+            # [151.018,151.065]],
             [[87.325,87.345],
              [87.44,87.46],
              [87.35,87.37]],
             [[118.285,118.310],
              [118.385,118.44]],
-            [[123.55,123.62]],
+            #[[123.55,123.62]],
             [],
             []
             ]
@@ -200,11 +219,11 @@ def cleanAtran(wave,trans):
             [110.99,111.1],
             [115.30,115.9],
             [139.20,139.50],
-            [142.5,143.45],
-            [150.72,151.48],
+            #[142.5,143.45],
+            #[150.72,151.48],
             [87.28,87.54],
             [118.25,118.47],
-            [123.2,123.7],
+            #[123.2,123.7],
             [143.92,144.10],
             [188.4,188.61]
             ]
@@ -246,33 +265,41 @@ def cleanAtran(wave,trans):
     #    trans[m] += 2*diff[m]
         
 
-def getATransBand(band, altitude, za, wv):
+def getATransBand(band, altitude, za, wv,w1=None,w2=None):
     from fifipy.spectra import getResolution
     # Get ATRAN model  
     res = 0
     i = 0
     if band == 'B2':
-        w1 = 45
-        w2 = 80
+        if w1 is None:
+            w1 = 45
+        if w2 is None:
+            w2 = 80
         i,wave,trans = callAtran(i,altitude,za,wv,w1,w2,res)
     elif band == 'B1':
-        w1 = 60
-        w2 = 100
-        i,wave1,trans1 = callAtran(i,altitude,za,wv,w1,w2,res)
-        w1 = 100
-        w2 = 130
-        i,wave2,trans2 = callAtran(i,altitude,za,wv,w1,w2,res)
-        wave = np.concatenate([wave1, wave2])
-        trans = np.concatenate([trans1, trans2])
+        if w1 is None:
+            w1 = 60
+            w2 = 100
+            i,wave1,trans1 = callAtran(i,altitude,za,wv,w1,w2,res)
+            w1 = 100
+            w2 = 130
+            i,wave2,trans2 = callAtran(i,altitude,za,wv,w1,w2,res)
+            wave = np.concatenate([wave1, wave2])
+            trans = np.concatenate([trans1, trans2])
+        else:
+            i,wave,trans = callAtran(i,altitude,za,wv,w1,w2,res)
     elif band == 'R':
-        w1 = 100
-        w2 = 155
-        i,wave1,trans1 = callAtran(i,altitude,za,wv,w1,w2,res)
-        w1 = 155
-        w2 = 210
-        i,wave2,trans2 = callAtran(i,altitude,za,wv,w1,w2,res)
-        wave = np.concatenate([wave1, wave2])
-        trans = np.concatenate([trans1, trans2])
+        if w1 is None:
+            w1 = 100
+            w2 = 155
+            i,wave1,trans1 = callAtran(i,altitude,za,wv,w1,w2,res)
+            w1 = 155
+            w2 = 210
+            i,wave2,trans2 = callAtran(i,altitude,za,wv,w1,w2,res)
+            wave = np.concatenate([wave1, wave2])
+            trans = np.concatenate([trans1, trans2])
+        else:
+            i,wave,trans = callAtran(i,altitude,za,wv,w1,w2,res)
 
     # clean ATRAN model
     trans = cleanAtran(wave, trans)
