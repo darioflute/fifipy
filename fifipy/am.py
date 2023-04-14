@@ -75,8 +75,8 @@ def atm_layer_setup(alt_ft, water_vapor = 0, layers = 2, temp_base = 0,
     #parts[1] = 330e-6 # CO2  Should be ~450e-6 now ...
     parts[1] = 450e-6 
     parts[2] = 0. # O3   Separately evalueted
-    #parts[3] = 0.28e-6 # N2O  total (should be around 0.331e-6)
-    parts[3] = 0.1e-6 # N2O  in the stratosphere ?
+    parts[3] = 0.28e-6 # N2O  total (should be around 0.331e-6)
+    #parts[3] = 0.1e-6 # N2O  in the stratosphere ?
     parts[4] = 0.075e-6 # CO
     #parts[5] = 1.6e-6 # CH4  1.895e-6 according to wikipedia in 2021
     parts[5] = 1.895e-6
@@ -484,7 +484,7 @@ def read_am_dat(filename = 'ATRAN'):
     
     return wavelength, transmission
 
-def callAM(altitude, wv, w1, w2, o3dobson=320):
+def callAM(altitude, wv, w1, w2, o3dobson=320, adjust=True):
     """Analogue to callAtran
     
     za is currently not used
@@ -498,9 +498,19 @@ def callAM(altitude, wv, w1, w2, o3dobson=320):
     filename = make_am_amc_file(p_all, t_all, w_gases, w1, w2)
     filename = run_am(filename)
     wavelength, transmission = read_am_dat(filename)
-    
+    if adjust:
+        trasmission = adjustLines(wavelength, transmission)
+
     return wavelength, transmission
-    
+
+def adjustLines(w,t):
+    # Adjust blue lines (too deep)
+    import numpy as np
+    idx = (w > 51.2) & (w < 52.5)
+    if np.sum(idx) > 0:
+        t[idx] = 1-(1-t[idx])*0.5
+    return t
+        
 def convolveAM(wave, trans, band):
     """ Convolution with FIFI-LS spectral resolution """
     import numpy as np
