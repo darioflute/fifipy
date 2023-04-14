@@ -72,7 +72,20 @@ def readAllData(fitsfile):
                    (alti_sta,alti_end), (wv_sta,wv_end))
             return aor, hk, gratpos, flux
 
+def readLinearize(channel):
+    import os
+    
+    path0, file0 = os.path.split(__file__)
+    if channel == 'RED':
+        file = 'Linearity_Red.fits'
+    else:
+        file = 'Linearity_Blue.fits'
+    with fits.open(os.path.join(path0,'data',file)) as hdul:
+        saturationLevel = hdul['saturation'].data
+        alpha = hdul['alpha'].data
 
+    return alpha, saturationLevel
+        
 def readData(fitsfile, subtractZero=True):
     """Data reader for Level 1 raw FIFI-LS files."""
 
@@ -215,7 +228,30 @@ def saveMediumSpectrum(w, medspec, path, filename):
     hdul.writeto(path+filename, overwrite=True)
     hdul.close()   
 
-def readMediumSpectrum(file, silent=False):
+def saveSpexelSpectrum(w, medspec, pixels, spexflats, alphas, path, filename):
+    # Save the BB curve
+    hdu = fits.PrimaryHDU()
+    hdu1 = fits.ImageHDU()
+    hdu1.data = w
+    hdu1.header['EXTNAME'] = 'Wavelength'
+    hdu2 = fits.ImageHDU()
+    hdu2.data = medspec
+    hdu2.header['EXTNAME'] = 'Flux'
+    hdu3 = fits.ImageHDU()
+    hdu3.data = pixels
+    hdu3.header['EXTNAME'] = 'Pixels'    
+    hdu4 = fits.ImageHDU()
+    hdu4.data = spexflats
+    hdu4.header['EXTNAME'] = 'Spexflats'
+    hdu5 = fits.ImageHDU()
+    hdu5.data = alphas
+    hdu5.header['EXTNAME'] = 'Alphas'
+    hdul = fits.HDUList([hdu, hdu1, hdu2, hdu3, hdu4, hdu5])
+    hdul.writeto(path+filename, overwrite=True)
+    hdul.close()   
+
+    
+def readMediumSpectrum(file, silent=True):
     hdl = fits.open(file)
     if silent == False:
         hdl.info()
@@ -223,6 +259,16 @@ def readMediumSpectrum(file, silent=False):
     f = hdl['Flux'].data
     hdl.close()
     return w, f
+
+def readSpexelSpectrum(file, silent=True):
+    hdl = fits.open(file)
+    if silent == False:
+        hdl.info()
+    w = hdl['Wavelength'].data
+    f = hdl['Flux'].data
+    s = hdl['Spexflats'].data
+    hdl.close()
+    return w, f, s
 
 def saveFlats(w, specflat, especflat, spatflat, channel, outfile):
     hdu = fits.PrimaryHDU()
@@ -274,12 +320,12 @@ def saveSpecFlats(w, specflat, especflat, channel, order, dichroic, outfile):
     hdul.writeto(outfile, overwrite=True)
     hdul.close()   
    
-def saveResponse(wtot, response, eresponse, output, channel, order, dichroic):
+def saveResponse(wr, response, eresponse, output, channel, order, dichroic):
     import numpy as np
     from astropy.io import fits
-    wr = np.arange(np.nanmin(wtot),np.nanmax(wtot),0.2)
-    fr = response(wr)
-    er = eresponse(wr)
+    #wr = np.arange(np.nanmin(wtot),np.nanmax(wtot),0.2)
+    fr = response
+    er = fr * eresponse
     data = []
     data.append(wr)
     data.append(fr)
