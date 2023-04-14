@@ -1,5 +1,6 @@
 {% set name = "fifipy" %}
-{% set version = "0.4" %}
+#{% set version = "0.4" %}
+{% set data = load_setup_py_data() %}
 
 package:
   name: "{{ name|lower }}"
@@ -18,11 +19,11 @@ requirements:
 
   run:
     - python
-    - matplotlib >=3.0.2
-    - numpy >=1.11
-    - scipy
-    - astropy >=3.0
-    - pyqt
+    - matplotlib >=3.7
+    - numpy >=1.23
+    - scipy >=1.10
+    - astropy >=5.1
+    - pyqt >=5.15
         
 test:
   imports:
@@ -34,4 +35,4 @@ about:
   home: https://github.com/darioflute/fifipy
   license: GPL3
   license_file: LICENSE
-  description: 'Library for reduction of non-standard FIFI-LS data.'
+  description: 'Library for reduction of non-standard FIFI-LS data and visualization of cubes.'
