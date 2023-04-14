@@ -70,6 +70,77 @@ def computeSplineFits(w1, dw1, s1, mode, wmin=None, wmax=None, delta=0.5):
         
     return w, np.array(spectra)
 
+def computeCebyshevFits(w1, dw1, s1, mode, wmin=None, wmax=None, delta=0.5, n=13):
+    
+    if wmin is None or wmax is None:
+        wmin=0
+        wmax=250
+        for ispex in range(16):
+            for ispax in range(25):
+                x1 = w1[:,ispax,ispex]
+                f1 = s1[:,ispex, ispax]
+                idx = np.isfinite(f1)
+                if np.sum(idx) > 2:
+                    xmin = np.nanmin(x1[idx])
+                    xmax = np.nanmax(x1[idx])
+                    if xmin > wmin: wmin = xmin
+                    if xmax < wmax: wmax = xmax
+
+    # Resolution
+    l = (wmin+wmax)*0.5
+    R = getResolution(mode, l)
+    # print("Resolution at ",l," is: ",R)
+    w = np.arange(wmin,wmax,l/R)
+    
+    # Compute spline fits
+    c = 299792458.e+6 # um/s
+    spectra = []
+    for ispax in range(25):
+        for ispex in range(16):
+            x = w1[:,ispax,ispex]
+            dnu = c/x * dw1[:,ispax,ispex]/x
+            y = s1[:,ispex,ispax]/dnu
+            # Sort x
+            idx = np.argsort(x)
+            x = x[idx]
+            y = y[idx]
+            # Uniq
+            #u, idx = np.unique(x, return_index=True)
+            #x = x[idx]
+            #y = y[idx]
+            try:
+                p = np.polynomial.Chebyshev.fit(x, y, n)
+                s = p(w)
+                idx = (w < x[1]) | (w > x[-1])
+                s[idx] = np.nan
+            except:
+                s = np.ones(len(w)) * np.nan
+            spectra.append(s)
+        
+    return w, np.array(spectra)
+
+def computeMedianSpatialSpectraOld(spectra):
+    """Compute spatial median spectra: a spectrum for each spaxel."""
+    spatspectra = []
+    for ispax in range(25):
+        # Discard deviant spectra
+        d = []
+        for ispex in range(16):
+            r = []
+            for jspex in range(16):
+                r.append(np.nanmedian(spectra[ispax*16+jspex]/spectra[ispax*16+ispex]))
+            d.append(np.nanmean(np.array(r)))
+        d = np.array(d)
+        med = np.nanmedian(d)
+        mad = np.nanmedian(np.abs(d-med))
+        m = np.abs(d-med) < 3*mad
+        # Obtain mean spectrum from non-deviant spectra
+        spec = spectra[ispax*16+np.arange(16,dtype='int')]
+        mspec = np.nanmean(spec[m],axis=0)
+        spatspectra.append(mspec)
+    return spatspectra
+
+
 def computeMedianSpatialSpectra(spectra):
     """Compute spatial median spectra: a spectrum for each spaxel."""
     spatspectra = []
@@ -90,6 +161,9 @@ def computeMedianSpatialSpectra(spectra):
         mspec = np.nanmean(spec[m],axis=0)
         spatspectra.append(mspec)
     return spatspectra
+
+
+
 
 def computeFlatRed(wwaves,sspectra,sspatspectra,ispax,ispex,minflat=0.5,maxflat=2.3,delta=0.4):
     from scipy.signal import medfilt
