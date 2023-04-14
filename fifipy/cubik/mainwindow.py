@@ -117,15 +117,19 @@ class GUI (QMainWindow):
             try:
                 self.specCloud = spectralCloud(path, self.specCube.pixscale)
             except:
+                print('Old cloud')
                 self.specCloud = spectralCloudOld(path, self.specCube.pixscale)
         except:
             print('The spectral cube cannot be read')
             
     def initializeImage(self):
         """Display the image and location of cal spaxels."""
+        print('Reading cubes..')
         s = self.specCube
+        print('Read cloud cube ...')
         sc = self.specCloud
         #image = np.nanmean(s.flux, axis=0)
+        print('Define image')
         image = s.flux[s.n0,:,:]
         #xy = np.array([[x_, y_] for x_, y_ in zip(sc.x, sc.y)], dtype=np.float64)
         xy = np.column_stack((sc.x, sc.y, sc.flight))
@@ -463,8 +467,8 @@ def main():
     # Adjust geometry to size of the screen
     screen_resolution = app.desktop().screenGeometry()
     width = screen_resolution.width()
-    gui.setGeometry(width*0.025, 0, width*0.95, width*0.5)
-    gui.hsplitter.setSizes ([width*0.40,width*0.48])
+    gui.setGeometry(int(width*0.025), 0, int(width*0.95), int(width*0.5))
+    gui.hsplitter.setSizes ([int(width*0.40), int(width*0.48)])
     # Add an icon for the application
     #app.setWindowIcon(QIcon(os.path.join(gui.path0,'icons','sospex.png')))
     app.setApplicationName('CUBIK')

@@ -177,8 +177,8 @@ class spectralCloud(object):
             with fits.open(os.path.join(path, calfile), memmap=False) as hlf:
             #hlf = fits.open(os.path.join(path, calfile))
                 header = hlf['PRIMARY'].header
-                obslam = header['OBSLAM']
-                obsbet = header['OBSBET']
+                #obslam = header['OBSLAM']
+                #obsbet = header['OBSBET']
                 channel = header['DETCHAN']
                 missnid = header['MISSN-ID']
                 flightNumber = int((missnid.split('_F'))[-1])
