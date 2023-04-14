@@ -64,7 +64,7 @@ from dask import delayed, compute
 
 
 
-def fitSlope(data, telSim=False, off=False):
+def fitSlope(data, telSim=False, off=False, alpha=None, saturation=None):
     """
         Fit the slope of a series of ramps for lab data.
         In this case, data are taken with the internal calibrator.
@@ -73,7 +73,7 @@ def fitSlope(data, telSim=False, off=False):
         The off position corresponds to the wheel position when the calibrator is not visible.
     """
 
-    saturationLimit = 2.5
+    saturationLimit = 2.4
     dtime = 1/250.  # Hz
     x = dtime * np.arange(32)
     rshape = np.shape(data)
@@ -81,7 +81,7 @@ def fitSlope(data, telSim=False, off=False):
     nramps = rshape[1] // 32  # There are 32 readouts per ramp
     slopes = []
     if telSim:
-        indices = [1,3]
+        indices = [3,1]
     else:
         indices = [0,2]
   
@@ -93,13 +93,26 @@ def fitSlope(data, telSim=False, off=False):
             ramp = ramps[j::4,:]  # One every 4 ramps
             ramp = np.nanmean(ramp, axis = 0)
             # Mask saturated values
-            mask = ramp > saturationLimit
+            mask = np.isfinite(ramp)
+            if saturation is None:
+                idx = ramp > saturationLimit
+                mask[idx] = 0
+            else:
+                idx = np.argwhere(ramp >= saturation)
+                if np.sum(idx) > 0:
+                    mask[idx[0][0]:] = 0
             # Mask first readouts and last one
-            mask[0:2] = 1
-            mask[-1] = 1
-            if np.sum(~mask) > 5:  # Compute only if there are at least 5 pts
+            mask[0:3] = 0
+            mask[-1] = 0
+            # Ramp linearization
+            if alpha is None:
+                pass
+            else:
+                ramp = 2 * ramp/ (1 + np.sqrt(1 + alpha*ramp))
+            
+            if np.sum(mask) > 5:  # Compute only if there are at least 5 pts
                 slope, intercept, r_value, \
-                    p_value, std_err = stats.linregress(x[~mask],ramp[~mask])
+                    p_value, std_err = stats.linregress(x[mask],ramp[mask])
                 rslopes.append(slope)
             else:
                 rslopes.append(np.nan)
@@ -182,17 +195,20 @@ def meanSlopeSky(data):
         slopes.append(slope)
     return np.array(slopes)
 
-def fitSlopeSpax(data, telSim=False, off=False):
+def fitSlopeSpax(data, telSim=False, off=False, alpha=None, saturation=None):
     """Fit the slope of the 16 spectral pixels."""
     
     slopes = []
     for i in range(25):
-        slope = fitSlope(data[:,:,i], telSim, off)
+        if alpha is None:
+            slope = fitSlope(data[:,:,i], telSim, off)
+        else:
+            slope = fitSlope(data[:,:,i], telSim, off, alpha[i], saturation[i])
         slopes.append(slope)
         
     return np.array(slopes)
 
-def fitAllSlopes(data, telSim=False, off=False):
+def fitAllSlopes(data, telSim=False, off=False, alpha=None, saturation=None):
 
     #client = Client(threads_per_worker=4, n_workers=1)
     #client.cluster
@@ -206,7 +222,10 @@ def fitAllSlopes(data, telSim=False, off=False):
     #return spectra
         
     # Using only spaxels
-    spaxels = [delayed(fitSlopeSpax)(data[:,:,i,:], telSim, off) for i in range(16)]        
+    if alpha is None:
+        spaxels = [delayed(fitSlopeSpax)(data[:,:,i,:], telSim, off) for i in range(16)]        
+    else:
+        spaxels = [delayed(fitSlopeSpax)(data[:,:,i,:], telSim, off, alpha[i,:], saturation[i,:]) for i in range(16)]        
     spectra = compute(* spaxels, scheduler='processes')
     spectra = np.asarray(spectra)
     ns = np.shape(spectra)
@@ -222,13 +241,19 @@ def fitAllSlopes(data, telSim=False, off=False):
     #print('ss shape ',np.shape(ss))
     return np.array(ss)
 
-def computeSpectra(files, telSim=False, off=False):
-    from fifipy.io import readData
+def computeSpectra(files, telSim=False, off=False, linearize=False):
+    from fifipy.io import readData, readLinearize
+    from astropy.io import fits
     
     n=len(files)
     print('number of files ', n)
     specs = np.zeros((n,16,25))
     gpos = np.zeros(n)
+
+    if linearize:
+        header =  fits.getheader(files[0])
+        channel = header['DETCHAN']
+        alpha, saturation = readLinearize(channel)
     
     for i,f in enumerate(files):
         if i%10 == 0:
@@ -236,12 +261,13 @@ def computeSpectra(files, telSim=False, off=False):
         else:
             print ('.',end='', flush=True)
         aor, hk, gratpos, flux = readData(f)
-        spectra = fitAllSlopes(flux, telSim, off)
+        if linearize:
+            spectra = fitAllSlopes(flux, telSim, off, alpha, saturation)
+        else:
+            spectra = fitAllSlopes(flux, telSim, off)
         specs[i,:,:] = spectra[0,:,:]   
         gpos[i] = gratpos[0]
         
-
-    #client.close()
     return gpos, specs
 
 
