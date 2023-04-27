@@ -266,9 +266,11 @@ def readSpexelSpectrum(file, silent=True):
         hdl.info()
     w = hdl['Wavelength'].data
     f = hdl['Flux'].data
+    p = hdl['Pixels'].data
     s = hdl['Spexflats'].data
+    a = hdl['Alphas'].data
     hdl.close()
-    return w, f, s
+    return w, f, p, s, a
 
 def saveFlats(w, specflat, especflat, spatflat, channel, outfile):
     hdu = fits.PrimaryHDU()
@@ -326,11 +328,7 @@ def saveResponse(wr, response, eresponse, output, channel, order, dichroic):
     #wr = np.arange(np.nanmin(wtot),np.nanmax(wtot),0.2)
     fr = response
     er = fr * eresponse
-    data = []
-    data.append(wr)
-    data.append(fr)
-    data.append(er)
-    data = np.array(data)
+    data = np.vstack((wr,fr,er))
     hdr = fits.Header()
     hdr['DETCHAN'] = channel
     hdr['ORDER'] = order

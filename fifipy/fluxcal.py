@@ -220,7 +220,7 @@ def computeResponse(x,y,w,f,alt,wvz,za,dic,wmodel,fmodel,conv130to105,band='R',d
         for i in range(len(alt)):
             ww = np.nanmean(w[i*16:(i+1)*16,goodpixels],axis=1)
             fmod = np.interp(ww, wmodel, fmodel)
-            if dic[i] == '105':
+            if dic[i] == 105:
                 ff = np.nansum(f[i*16:(i+1)*16,goodpixels],axis=1)
                 if (dichroic == 'both') | (dichroic == '105'):
                     ax.plot(ww,ff/fmod,color='red',alpha=0.5)

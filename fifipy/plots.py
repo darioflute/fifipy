@@ -105,6 +105,7 @@ def plotResponse(channel,dichroic,order,w,medspec,alpha,caldir,period):
 
 
     if period == 'Old':
+        #responsedir = os.path.join(path0,'data')
         responsedir = '/Users/dfadda/Pipeline/fifi-ls/data/response_files/20170816/'
         if channel == 'R':
             if dichroic == 105:
