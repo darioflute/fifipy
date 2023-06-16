@@ -276,6 +276,12 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
     from fifipy.calib import readAtran
     import numpy as np
     from fifipy.stats import biweightLocation
+    from matplotlib import rcParams
+    rcParams['font.family']='STIXGeneral'
+    rcParams['font.size']=18
+    rcParams['mathtext.fontset']='stix'
+    rcParams['legend.numpoints']=1 
+
     #import time
     #from astropy import units as u
     #from astropy.modeling.blackbody import blackbody_nu
@@ -446,7 +452,7 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             fig,axes = plt.subplots(1, 3, figsize=(16,5), sharey=True,
                                     gridspec_kw = {'width_ratios': [2,3,3]})
             ax=axes[0]
-            ax.set_title('WVZ')
+            #ax.set_title('WVZ')
             ax.plot(wvs,diff/np.nanmax(diff))#, 'o')
             ax.grid()
             ax1 = axes[1]
@@ -647,7 +653,7 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             fig,axes = plt.subplots(1,2,figsize=(16,5),sharey=True, 
                                     gridspec_kw = {'width_ratios': [2,6]})
             ax=axes[0]
-            ax.set_title('WVZ')
+            #ax.set_title('WVZ')
             ax.plot(wvs,diff/np.nanmax(diff))#,'o')
             ax.grid()
             ax=axes[1]
@@ -693,10 +699,16 @@ def computeAtran(waves, fluxes, detchan, order, za, altitude,
             plt.show()
     return wvmin, alpha, wtot, ftotabs
 
-def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2,wide=False):
+def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2,wide=False,save=False):
     import numpy as np
     import matplotlib.pyplot as plt
-    from fifipy.stats import biweightLocation 
+    from fifipy.stats import biweightLocation
+    from matplotlib import rcParams
+    rcParams['font.family']='STIXGeneral'
+    rcParams['font.size']=25
+    rcParams['mathtext.fontset']='stix'
+    rcParams['legend.numpoints']=1 
+
     
     wtr, atranr, altitudes, wvs = atran1
     wtb, atranb, altitudes, wvs = atran2
@@ -822,10 +834,12 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2,wide=
     fredc = fred * (tmax - tmin) + tmin
 
 
-    fig,axes = plt.subplots(1, 4, figsize=(16,5), sharey=True,
+    fig,axes = plt.subplots(1, 4, figsize=(16,8), sharey=True,
                                 gridspec_kw = {'width_ratios': [1,1,1,2]})
     ax=axes[0]
-    ax.set_title('WVZ')
+    #ax.set_title('WVZ')
+    ax.set_xlabel('WVZ [$\mu$m]')
+    ax.set_ylabel('Transmission')
     ax.plot(wvs,diff/np.nanmax(diff))#, 'o')
     ax.grid()
     ax=axes[1]
@@ -835,30 +849,32 @@ def computeAtranTot(wred, fred, wblue, fblue, za, altitude, atran1, atran2,wide=
     ax.plot( wtb,tb,color='orange',linewidth=2)
     ax.grid()
     ax=axes[2]
+    ax.set_xlabel('Wavelength [$\mu$m]')
     ax.plot(wblue, fbluec,'.')
     if wide:
         ax.set_xlim(62.75,64.2)
     else:
-        ax.set_xlim(63.01,63.77)
-    ax.set_ylim(-0.3,1.2)
+        ax.set_xlim(63.01,63.74)
+    ax.set_ylim(-0.19,1.2)
     ax.grid()
     plt.subplots_adjust(wspace=0)
     ax.plot( wtb,tb,color='orange',linewidth=2)
     ax=axes[3]
     ax.plot(wred, fredc,'.',color='red')
     if wide:
-        ax.set_xlim(143.5, 149.9)
+        ax.set_xlim(143.5, 150)
     else:
-        ax.set_xlim(145.5, 149.9)
-    ax.set_ylim(-0.3,1.2)
+        ax.set_xlim(145.5, 150)
+    ax.set_ylim(-0.3,1.19)
     ax.grid()
     plt.subplots_adjust(wspace=0)
     ax.plot( wtr,tr,color='orange',linewidth=2)
         
     fig.suptitle('Alt: '+str(altitude)+ ', ZA: '+'{:5.2f}'.format(za)+
-                     ', WVZ: ' + '{:5.2f}'.format(wvmin), size=20)
+                     ', WVZ: ' + '{:5.2f}'.format(wvmin), size=25)
     fig.subplots_adjust(top=0.9) 
     plt.show()
+    fig.savefig('wvztot.pdf',bbox_inches='tight',pad_inches=0)
     
     return wvmin
 
@@ -1063,7 +1079,7 @@ def baryshift(obsdate, ra, dec, equinox='J2000'):
     return result.value
 
 
-def computeWVZ(wvzdir,flight,atran1,atran2,subgroup=None,computeAlpha=True,wide=False):
+def computeWVZ(wvzdir,flight,atran1,atran2,subgroup=None,computeAlpha=True,wide=False,save=False):
     import numpy as np
     from fifipy.wvz import computeMeanFlux, computeAtran, getGroups, getGroupsWide, computeAtranTot, computeFluxes
     #import time
@@ -1121,7 +1137,7 @@ def computeWVZ(wvzdir,flight,atran1,atran2,subgroup=None,computeAlpha=True,wide=
             wmred.append(wvmin)
             # Two fluxes at same time
             wvmin = computeAtranTot(wred, fred, wblue ,fblue, zar, 
-                                    altituder, atran1, atran2,wide=wide)
+                                    altituder, atran1, atran2,wide=wide,save=save)
             wmtot.append(wvmin)
             #t1 = time.process_time()
             #print('Data processed in ', t1-t0, ' s.')

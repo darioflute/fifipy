@@ -338,6 +338,42 @@ def saveResponse(wr, response, eresponse, output, channel, order, dichroic):
     hdu = fits.PrimaryHDU(data, header=hdr)
     hdul = fits.HDUList([hdu])
     hdul.writeto(output,overwrite=True)
+    hdul.close()
+
+def saveResponseCurves(wav, flux, alpha, flights, outfile, channel, order, dichroic):
+    import numpy as np
+    from astropy.io import fits
+
+    hdr = fits.Header()
+    hdr['DETCHAN'] = channel
+    hdr['ORDER'] = order
+    hdr['DICHOIC'] = dichroic
+    hdr['XUNIT'] = 'microns'
+    hdr['YUNIT'] = 'ADU/Hz/Jy'
+
+    hdu = fits.PrimaryHDU()
+    hdu.header['CHANNEL'] = channel
+    hdu.header['ORDER'] = order
+    hdu.header['DICHROIC'] = dichroic
+    hdu.header['XUNIT'] = 'microns'
+    hdu.header['YUNIT'] = 'ADU/Hz/Jy'
+    hdu1 = fits.ImageHDU()
+    hdu1.data = alpha
+    hdu1.header['EXTNAME'] = 'ALPHA'
+    hdu2 = fits.ImageHDU()
+    hdu2.data = flights
+    hdu2.header['EXTNAME'] = 'FLIGHTS'
+    hdulist = [hdu, hdu1, hdu2]
+    for n, (w, f) in enumerate(zip(wav, flux)):
+        hdui = fits.ImageHDU()
+        data = np.vstack((w,f))
+        hdui.data = data
+        hdui.header['EXTNAME'] = 'DATA'+str(n+1)
+        hdulist.append(hdui)
+    hdul = fits.HDUList(hdulist)
+    hdul.writeto(outfile, overwrite=True)
+    hdul.close()
+    
     
 def readResponse(file):
     from astropy.io import fits

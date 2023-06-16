@@ -541,9 +541,9 @@ def readResponse(array, dichroic, order, obsdate):
     parts = re.split('-|T|:', obsdate)
     odate = int(parts[0]+parts[1]+parts[2])
     if odate <  20180101:
-        file = path0+'/data/Response_'+array+'_D'+str(dichroic)+'_Ord'+str(order)+'_20190705v1.fits'
+        file = path0+'/data/Response_'+array+'_D'+str(dichroic)+'_Ord'+str(order)+'_20230505v1.fits'
     else:
-        file = path0+'/data/Response_'+array+'_D'+str(dichroic)+'_Ord'+str(order)+'_20190705v2.fits'
+        file = path0+'/data/Response_'+array+'_D'+str(dichroic)+'_Ord'+str(order)+'_20230505v2.fits'
     hdl = fits.open(file)
     data = hdl['PRIMARY'].data
     hdl.close()

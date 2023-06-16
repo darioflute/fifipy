@@ -237,8 +237,9 @@ def computeResponse(x,y,w,f,alt,wvz,za,dic,wmodel,fmodel,conv130to105,band='R',d
                     ff = np.nansum(f[i*16:(i+1)*16,goodpixels],axis=1)
                     ax.plot(ww, ff/fmod,color='purple',alpha=0.5)
 
-    wtot = []
+    futot = []
     ftot = []
+    wtot = []
     for i in range(len(alt)):
         print(i, end=' ')
         #xx = np.nanmean(x[i*16:(i+1)*16,:],axis=0)
@@ -261,10 +262,11 @@ def computeResponse(x,y,w,f,alt,wvz,za,dic,wmodel,fmodel,conv130to105,band='R',d
         depth = 1. / cos_angle  # Flat Earth approximation
         ti = ti**depth
         idx = (ff < 0) | (ti < atmthreshold)
-        ff[idx] = np.nan
         fmod = np.interp(ww, wmodel, fmodel)
         if dic[i] == 105:
             if (dichroic == 'both') | (dichroic == '105'):
+                futot.extend(ff/fmod)
+                ff[idx] = np.nan
                 ftot.extend(ff/ti/fmod)
                 wtot.extend(ww)
                 if plot:
@@ -279,12 +281,16 @@ def computeResponse(x,y,w,f,alt,wvz,za,dic,wmodel,fmodel,conv130to105,band='R',d
                 #    fi [:,j] /= f2
                 #ff = np.nansum(fi[:,goodpixels],axis=1)
                 f2 = np.interp(ww, w130, f105to130)
+                futot.extend(ff/fmod/f2)
+                ff[idx] = np.nan
                 ftot.extend(ff/ti/fmod/f2)
                 wtot.extend(ww)
                 if plot:
                     ax.plot(ww, ff/ti/fmod/f2,color='purple')
                     ax1.plot(ww, ti)
             elif dichroic == '130':
+                futot.extend(ff/fmod)
+                ff[idx] = np.nan
                 ftot.extend(ff/ti/fmod)
                 wtot.extend(ww)
                 if plot:
@@ -295,4 +301,4 @@ def computeResponse(x,y,w,f,alt,wvz,za,dic,wmodel,fmodel,conv130to105,band='R',d
         ax1.grid()
         plt.show()
 
-    return np.array(wtot), np.array(ftot)
+    return np.array(wtot), np.array(ftot), np.array(futot)

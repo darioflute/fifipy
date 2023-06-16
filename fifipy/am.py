@@ -124,7 +124,7 @@ def atm_layer_setup(alt_ft, water_vapor = 0, layers = 2, temp_base = 0,
         target_vapor = water_vapor / 2.994E-19 # conv microns to molecules/cm^2
         alt_new = np.interp(-target_vapor, -atm_c_H2O, atm_alt)
         alt_diff = alt_new-alt_km # Find altitude with measured water vapor
-        i_tenths = np.int(np.floor(alt_diff*10))
+        i_tenths = int(np.floor(alt_diff*10))
         
         # shifting if necessary
         if i_tenths != 0:
@@ -161,7 +161,7 @@ def atm_layer_setup(alt_ft, water_vapor = 0, layers = 2, temp_base = 0,
     
     column_O3_lat = np.array((6.86e18, 8.41e18, 1.03e19, 1.21e19))
     i_top = i_H2O_top
-    i_alt_start = np.int(alt_km*10+1)
+    i_alt_start = int(alt_km*10+1)
     
     column_O3 = np.zeros((292,1))
     
@@ -506,9 +506,9 @@ def callAM(altitude, wv, w1, w2, o3dobson=320, adjust=True):
 def adjustLines(w,t):
     # Adjust blue lines (too deep)
     import numpy as np
-    idx = (w > 51.2) & (w < 52.5)
+    idx = (w > 49) & (w < 52.5)
     if np.sum(idx) > 0:
-        t[idx] = 1-(1-t[idx])*0.5
+        t[idx] = 1-(1-t[idx])*0.6
     return t
         
 def convolveAM(wave, trans, band):
